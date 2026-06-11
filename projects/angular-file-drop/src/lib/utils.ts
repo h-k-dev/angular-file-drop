@@ -205,7 +205,11 @@ export async function walkEntry(
       if (!traverseDirectories) {
         return [];
       }
-      return await resolveDirectoryEntry(entry as FileSystemDirectoryEntry, basePath, traverseDirectories);
+      return await resolveDirectoryEntry(
+        entry as FileSystemDirectoryEntry,
+        basePath,
+        traverseDirectories,
+      );
     }
   } catch (err) {
     console.warn(`[FileDnd] Skipped entry ${entry.name} due to error:`, err);
