@@ -1,0 +1,70 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - development
+      - beta
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+      
+      # ─── Runs your fast, headless Vitest suite ───
+      - name: Run tests
+        run: npm run test:ci
+
+      # ─── Only builds if tests pass ───
+      - name: Build library
+        run: npm run build angular-inline-svg
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'beta')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+      issues: write   
+      pull-requests: write 
+      id-token: write 
+      packages: write 
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      # Ensure npm >= 11.5.1, required for OIDC Trusted Publishing.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - name: Build library
+        run: npm run build angular-inline-svg
+
+      # Publishes via npm OIDC Trusted Publishing — no NPM_TOKEN required.
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release@25
