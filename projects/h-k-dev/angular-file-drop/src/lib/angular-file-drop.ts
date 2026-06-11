@@ -3,7 +3,6 @@ import {
   Component,
   computed,
   DestroyRef,
-  Directive,
   ElementRef,
   inject,
 
@@ -13,26 +12,21 @@ import {
   signal,
 } from '@angular/core';
 
-export interface DroppedFile {
-  file: File;
-  relativePath: string;
-}
+import type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.types';
+import {
+  containsFiles,
+  createHiddenFileInput,
+  enforceMultiple,
+  FILE_DND_IGNORE_SELECTOR,
+  filterAcceptedFiles,
+  filterHiddenFiles,
+  readDroppedFiles,
+  setDropEffect,
+  toDroppedFiles,
+} from './utils';
 
-export interface FileDropEvent {
-  files: DroppedFile[];
-}
+export type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.types';
 
-export interface FilePickerOptions {
-  /**
-   * Allows dropped folders/directories to be traversed.
-   *
-   * This should NOT force the hidden file input into directory-picker mode.
-   */
-  directory?: boolean;
-}
-
-const FILE_DND_IGNORE_SELECTOR =
-  'button,a,input,textarea,select,[contenteditable="true"],[data-file-dnd-ignore]';
 @Component({
   selector: 'lib-angular-file-drop',
   imports: [],
@@ -104,7 +98,7 @@ export class AngularFileDrop {
   }
 
   onDragEnter(event: DragEvent) {
-    if (!this.containsFiles(event) || event.defaultPrevented) return;
+    if (!containsFiles(event) || event.defaultPrevented) return;
     if (this.disabled()) {
       this.resetDragState();
       return;
@@ -115,21 +109,11 @@ export class AngularFileDrop {
     this.dragEnter.emit(event);
   }
 
-  setDropEffect(event: DragEvent, dropEffect: DataTransfer['dropEffect']): void {
-    try {
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = dropEffect;
-      }
-    } catch (error) {
-      console.warn('[IustaFileDndDirective] setDropEffect error:', error);
-    }
-  }
-
   onDragOver(event: DragEvent) {
-    if (!this.containsFiles(event) || event.defaultPrevented) return;
+    if (!containsFiles(event) || event.defaultPrevented) return;
     if (this.disabled()) {
       event.preventDefault();
-      this.setDropEffect(event, 'none');
+      setDropEffect(event, 'none');
       this.resetDragState();
       return;
     }
@@ -139,9 +123,9 @@ export class AngularFileDrop {
     // Mirror Dropzone.js effectAllowed logic
     try {
       const effect = event.dataTransfer!.effectAllowed;
-      this.setDropEffect(event, effect === 'move' || effect === 'linkMove' ? 'move' : 'copy');
+      setDropEffect(event, effect === 'move' || effect === 'linkMove' ? 'move' : 'copy');
     } catch (error) {
-      console.warn('[IustaFileDndDirective] onDragOver effectAllowed error:', error);
+      console.warn('[FileDnd] onDragOver effectAllowed error:', error);
     }
 
     this.isDragOver.set(true);
@@ -149,7 +133,7 @@ export class AngularFileDrop {
   }
 
   onDragLeave(event: DragEvent) {
-    if (!this.containsFiles(event)) return;
+    if (!containsFiles(event)) return;
 
     if (this.disabled()) {
       this.resetDragState();
@@ -168,7 +152,7 @@ export class AngularFileDrop {
 
   // Global reset: if the drag leaves the browser window entirely, relatedTarget is null
   onDocumentDragLeave(event: DragEvent) {
-    if (!this.containsFiles(event)) return; // Polish: ignore dragging text/links out of window
+    if (!containsFiles(event)) return; // Polish: ignore dragging text/links out of window
     if (!event.relatedTarget) this.resetDragState();
   }
 
@@ -177,7 +161,7 @@ export class AngularFileDrop {
   }
 
   async onDrop(event: DragEvent) {
-    if (!this.containsFiles(event)) return;
+    if (!containsFiles(event)) return;
 
     // Another, more specific dropzone already handled it.
     if (event.defaultPrevented) {
@@ -199,91 +183,10 @@ export class AngularFileDrop {
     const dt = event.dataTransfer;
     if (!dt) return;
 
-    const items = Array.from(dt.items ?? []).filter((item) => item.kind === 'file');
-    let dropped: DroppedFile[] = [];
-
-    // Feature detection for the modern File System Access API
-    const supportsHandles = items.length > 0 && 'getAsFileSystemHandle' in items[0];
-
-    try {
-      if (supportsHandles) {
-        // Hardened: Wrap individual handle retrieval to prevent single-file failures from crashing Promise.all
-        const handles = (
-          await Promise.all(
-            items.map(async (item) => {
-              try {
-                return (await (item as any).getAsFileSystemHandle()) as FileSystemHandle | null;
-              } catch (err) {
-                console.warn('[FileDnd] Failed to get handle for item:', err);
-                return null;
-              }
-            }),
-          )
-        ).filter((h): h is FileSystemHandle => h !== null);
-
-        dropped = await this.walkHandles(handles, '');
-      }
-
-      // Fallback 1: The old webkit API (still supports folders)
-      else if (items.length && 'webkitGetAsEntry' in items[0]) {
-        const entries = items
-          .map((item) => item.webkitGetAsEntry())
-          .filter((entry): entry is FileSystemEntry => entry !== null);
-
-        dropped = await this.walkEntries(entries, '');
-      }
-
-      // Fallback 2: Basic FileList (no folder traversal support)
-      else {
-        dropped = Array.from(dt.files).map((file) => ({
-          file,
-          relativePath: file.name,
-        }));
-      }
-    } catch (error) {
-      console.error('[FileDnd] Error reading dropped files:', error);
-    }
+    const dropped = await readDroppedFiles(dt, this.directory());
 
     const filtered = this.prepareFiles(dropped);
     if (filtered.length) this.fileDrop.emit({ files: filtered });
-  }
-
-  // ─── Modern FileSystemHandle Traversal ────────────────────────────────────
-  async walkHandles(handles: FileSystemHandle[], basePath: string): Promise<DroppedFile[]> {
-    const results: DroppedFile[] = [];
-
-    for (const handle of handles) {
-      try {
-        if (handle.kind === 'file') {
-          const fileHandle = handle as FileSystemFileHandle;
-          const file = await fileHandle.getFile();
-          // Note: Optimization removed. prepareFiles() acts as the single source of truth for hidden files.
-          results.push({ file, relativePath: basePath + file.name });
-        } else if (handle.kind === 'directory') {
-          // Gate directory traversal
-          if (!this.directory()) {
-            continue;
-          }
-
-          const dirHandle = handle as FileSystemDirectoryHandle;
-          const dirPath = basePath + dirHandle.name + '/';
-
-          const children: FileSystemHandle[] = [];
-
-          for await (const [_, child] of (dirHandle as any).entries()) {
-            children.push(child);
-          }
-
-          const childResults = await this.walkHandles(children, dirPath);
-          results.push(...childResults);
-        }
-      } catch (err) {
-        // Hardened: if one file is locked or requires permissions the user denied, just skip it
-        console.warn(`[FileDnd] Skipped handle ${handle.name} due to error:`, err);
-      }
-    }
-
-    return results;
   }
 
   // ─── Hidden Input (Attached to Body) ──────────────────────────────────────
@@ -304,24 +207,8 @@ export class AngularFileDrop {
   getOrCreateFileInput(): HTMLInputElement {
     if (this.hiddenInput) return this.hiddenInput;
 
-    const input = document.createElement('input');
-    input.type = 'file';
-
-    // Apply stealth styles
-    input.style.position = 'fixed';
-    input.style.opacity = '0';
-    input.style.pointerEvents = 'none';
-    input.style.width = '0';
-    input.style.height = '0';
-    input.style.top = '0';
-    input.style.left = '0';
-    input.tabIndex = -1;
-    input.setAttribute('aria-hidden', 'true');
-
+    const input = createHiddenFileInput();
     this.syncInput(input);
-
-    // Append input to the document body to prevent void-element issues
-    document.body.appendChild(input);
 
     const onChange = () => {
       if (this.disabled()) {
@@ -329,10 +216,7 @@ export class AngularFileDrop {
         return;
       }
 
-      const files: DroppedFile[] = Array.from(input.files ?? []).map((file) => ({
-        file,
-        relativePath: file.webkitRelativePath || file.name,
-      }));
+      const files = toDroppedFiles(input.files ?? []);
 
       const filtered = this.prepareFiles(files);
       if (filtered.length) this.fileDrop.emit({ files: filtered });
@@ -354,134 +238,10 @@ export class AngularFileDrop {
     return input;
   }
 
-  // ─── FileSystemEntry Traversal ────────────────────────────────────────────
-  walkEntries(entries: FileSystemEntry[], basePath: string): Promise<DroppedFile[]> {
-    return Promise.all(entries.map((entry) => this.walkEntry(entry, basePath))).then((results) =>
-      results.flat(),
-    );
-  }
-
-  async walkEntry(entry: FileSystemEntry, basePath: string): Promise<DroppedFile[]> {
-    try {
-      if (entry.isFile) {
-        return await this.resolveFileEntry(entry as FileSystemFileEntry, basePath);
-      } else if (entry.isDirectory) {
-        // Gate directory traversal
-        if (!this.directory()) {
-          return [];
-        }
-        return await this.resolveDirectoryEntry(entry as FileSystemDirectoryEntry, basePath);
-      }
-    } catch (err) {
-      console.warn(`[FileDnd] Skipped entry ${entry.name} due to error:`, err);
-    }
-    return [];
-  }
-
-  shouldIgnorePath(relativePath: string): boolean {
-    if (!this.ignoreHiddenFiles()) return false;
-
-    return relativePath.split('/').some((part) => part.length > 1 && part.startsWith('.'));
-  }
-
-  resolveFileEntry(entry: FileSystemFileEntry, basePath: string): Promise<DroppedFile[]> {
-    return new Promise((resolve) => {
-      entry.file(
-        (file) => {
-          // Note: Optimization removed. prepareFiles() acts as the single source of truth for hidden files.
-          resolve([{ file, relativePath: basePath + file.name }]);
-        },
-        (err) => {
-          console.warn('[FileDnd] file entry error:', err);
-          resolve([]);
-        },
-      );
-    });
-  }
-
-  resolveDirectoryEntry(entry: FileSystemDirectoryEntry, basePath: string): Promise<DroppedFile[]> {
-    const dirPath = basePath + entry.name + '/';
-    const reader = entry.createReader();
-    const collected: FileSystemEntry[] = [];
-
-    return new Promise((resolve) => {
-      const readBatch = () => {
-        reader.readEntries(
-          async (batch) => {
-            if (batch.length === 0) {
-              const results = await this.walkEntries(collected, dirPath);
-              resolve(results);
-            } else {
-              collected.push(...batch);
-              readBatch();
-            }
-          },
-          (err) => {
-            console.warn('[FileDnd] readEntries error:', err);
-            resolve([]);
-          },
-        );
-      };
-
-      readBatch();
-    });
-  }
-
-  // ─── Validation Helpers ───────────────────────────────────────────────────
+  // ─── Validation ───────────────────────────────────────────────────────────
   prepareFiles(files: DroppedFile[]): DroppedFile[] {
-    return this.enforceMultiple(this.applyAcceptFilter(this.applyHiddenFilter(files)));
-  }
-
-  applyHiddenFilter(files: DroppedFile[]): DroppedFile[] {
-    if (!this.ignoreHiddenFiles()) return files;
-    return files.filter((f) => !this.shouldIgnorePath(f.relativePath));
-  }
-
-  containsFiles(event: DragEvent): boolean {
-    if (!event.dataTransfer?.types) return false;
-    return Array.from(event.dataTransfer.types).includes('Files');
-  }
-
-  isValidFile(file: File): boolean {
-    const acceptStr = this.acceptedFiles();
-    if (!acceptStr) return true;
-
-    const accepted = acceptStr
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-
-    const mime = (file.type || '').toLowerCase();
-    const baseMime = mime.replace(/\/.*$/, '');
-    const name = file.name.toLowerCase();
-
-    return accepted.some((valid) => {
-      if (valid === '*/*') {
-        return true;
-      }
-
-      if (valid.startsWith('.')) {
-        return name.endsWith(valid);
-      }
-
-      if (valid.endsWith('/*')) {
-        return baseMime === valid.replace(/\/.*$/, '');
-      }
-
-      return mime === valid;
-    });
-  }
-
-  applyAcceptFilter(files: DroppedFile[]): DroppedFile[] {
-    const acceptStr = this.acceptedFiles();
-    if (!acceptStr) return files;
-    return files.filter((f) => this.isValidFile(f.file));
-  }
-
-  enforceMultiple(files: DroppedFile[]): DroppedFile[] {
-    if (!this.multiple() && files.length > 1) {
-      return [files[0]];
-    }
-    return files;
+    const visible = this.ignoreHiddenFiles() ? filterHiddenFiles(files) : files;
+    const accepted = filterAcceptedFiles(visible, this.acceptedFiles());
+    return enforceMultiple(accepted, this.multiple());
   }
 }

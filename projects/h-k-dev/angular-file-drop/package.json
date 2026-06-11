@@ -1,6 +1,6 @@
 {
   "name": "@h-k-dev/angular-file-drop",
-  "version": "0.0.1",
+  "version": "0.0.0-development",
   "peerDependencies": {
     "@angular/common": "^21.2.0",
     "@angular/core": "^21.2.0"
