@@ -6,20 +6,20 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "@h-k-dev/angular-file-drop": {
+    "angular-file-drop": {
       "projectType": "library",
-      "root": "projects/h-k-dev/angular-file-drop",
-      "sourceRoot": "projects/h-k-dev/angular-file-drop/src",
+      "root": "projects/angular-file-drop",
+      "sourceRoot": "projects/angular-file-drop/src",
       "prefix": "lib",
       "architect": {
         "build": {
           "builder": "@angular/build:ng-packagr",
           "configurations": {
             "production": {
-              "tsConfig": "projects/h-k-dev/angular-file-drop/tsconfig.lib.prod.json"
+              "tsConfig": "projects/angular-file-drop/tsconfig.lib.prod.json"
             },
             "development": {
-              "tsConfig": "projects/h-k-dev/angular-file-drop/tsconfig.lib.json"
+              "tsConfig": "projects/angular-file-drop/tsconfig.lib.json"
             }
           },
           "defaultConfiguration": "production"
@@ -27,7 +27,7 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "tsConfig": "projects/h-k-dev/angular-file-drop/tsconfig.spec.json"
+            "tsConfig": "projects/angular-file-drop/tsconfig.spec.json"
           }
         }
       }

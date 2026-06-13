@@ -1,64 +1,107 @@
-# AngularFileDrop
+# @h-k-dev/angular-file-drop
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.0.
+A lightweight, signal-based Angular directive for drag-and-drop file and folder
+uploads. It supports directory traversal, `accept`-style type filtering, and
+click-to-open file/directory pickers — all from a single `dropZone` directive.
 
-## Code scaffolding
+- Standalone directive (no `NgModule`)
+- Signal inputs/outputs
+- Drag-and-drop **and** click-to-pick
+- Folder drops with recursive traversal (File System Access API, with
+  `webkitGetAsEntry` and `FileList` fallbacks)
+- `accept`-style filtering and hidden-file skipping
+- SSR-safe (the hidden `<input>` is only created in the browser)
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the library, run:
+## Installation
 
 ```bash
-ng build angular-file-drop
+npm install @h-k-dev/angular-file-drop
 ```
 
-This command will compile your project, and the build artifacts will be placed in the `dist/` directory.
+Requires Angular `>= 17.3`.
 
-### Publishing the Library
+## Usage
 
-Once the project is built, you can publish your library by following these steps:
+Import the standalone directive and apply `dropZone` to any element:
 
-1. Navigate to the `dist` directory:
+```ts
+import { Component } from '@angular/core';
+import { AngularFileDrop, FileDropEvent } from '@h-k-dev/angular-file-drop';
 
-   ```bash
-   cd dist/angular-file-drop
-   ```
-
-2. Run the `npm publish` command to publish your library to the npm registry:
-   ```bash
-   npm publish
-   ```
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
+@Component({
+  selector: 'app-uploader',
+  imports: [AngularFileDrop],
+  template: `
+    <div
+      dropZone
+      [acceptedFiles]="'image/*,.pdf'"
+      (fileDrop)="onDrop($event)"
+    >
+      Drop files here, or click to browse.
+    </div>
+  `,
+})
+export class UploaderComponent {
+  onDrop(event: FileDropEvent) {
+    for (const { file, relativePath } of event.files) {
+      console.log(relativePath, file);
+    }
+  }
+}
 ```
 
-## Running end-to-end tests
+### Programmatic pickers
 
-For end-to-end (e2e) testing, run:
+Grab the directive via its exported reference to open pickers from code:
 
-```bash
-ng e2e
+```html
+<div dropZone #zone="dropZone" [isManualActivation]="true">
+  <button (click)="zone.openFilePicker($event)">Choose files</button>
+  <button (click)="zone.openDirectoryPicker($event)">Choose a folder</button>
+</div>
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+## Inputs
 
-## Additional Resources
+| Input                | Type      | Default | Description                                                              |
+| -------------------- | --------- | ------- | ------------------------------------------------------------------------ |
+| `multiple`           | `boolean` | `true`  | Allow selecting more than one file.                                      |
+| `directory`          | `boolean` | `true`  | Traverse dropped folders recursively.                                    |
+| `directoryPicker`    | `boolean` | `false` | Open the click picker in directory mode (`webkitdirectory`).             |
+| `acceptedFiles`      | `string`  | `''`    | `accept`-style filter, e.g. `image/*,.pdf`.                              |
+| `ignoreHiddenFiles`  | `boolean` | `true`  | Skip dot-files such as `.DS_Store`.                                      |
+| `clickable`          | `boolean` | `true`  | Open the file picker when the host is clicked or activated by keyboard.  |
+| `disabled`           | `boolean` | `false` | Ignore drops and clicks.                                                 |
+| `isManualActivation` | `boolean` | `false` | Disable host click/keyboard activation (drive pickers programmatically). |
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+## Outputs
+
+| Output      | Payload         | Description                               |
+| ----------- | --------------- | ----------------------------------------- |
+| `fileDrop`  | `FileDropEvent` | Emits the filtered files on drop or pick. |
+| `dragEnter` | `DragEvent`     | A file drag entered the zone.             |
+| `dragOver`  | `DragEvent`     | A file drag is over the zone.             |
+| `dragLeave` | `DragEvent`     | A file drag left the zone.                |
+
+`FileDropEvent.files` is an array of `DroppedFile`:
+
+```ts
+interface DroppedFile {
+  file: File;
+  relativePath: string; // e.g. "photos/2024/img.png" for folder drops
+}
+```
+
+## Accept-type helpers
+
+`FILE_TYPES` provides ready-made `accept` strings for common formats:
+
+```ts
+import { FILE_TYPES } from '@h-k-dev/angular-file-drop';
+
+acceptedFiles = `${FILE_TYPES.PDF},${FILE_TYPES.ANY_IMAGE}`;
+```
+
+## License
+
+MIT
