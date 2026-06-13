@@ -4,6 +4,7 @@ import {
   computed,
   DestroyRef,
   ElementRef,
+  PLATFORM_ID,
   inject,
 
   // Signals
@@ -24,6 +25,7 @@ import {
   setDropEffect,
   toDroppedFiles,
 } from './utils';
+import { isPlatformBrowser } from '@angular/common';
 
 export type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.types';
 
@@ -85,6 +87,8 @@ export class AngularFileDrop {
   dragLeave = output<DragEvent>();
   dragOver = output<DragEvent>();
 
+  #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
   // ─── State ────────────────────────────────────────────────────────────────
   isDragOver = signal(false);
 
@@ -97,6 +101,8 @@ export class AngularFileDrop {
     if (this.disabled()) return;
 
     const input = this.getOrCreateFileInput();
+    if (!input) return;
+
     this.syncInput(input, options);
     input.click();
   }
@@ -229,7 +235,8 @@ export class AngularFileDrop {
     }
   }
 
-  getOrCreateFileInput(): HTMLInputElement {
+  getOrCreateFileInput() {
+    if (!this.#isBrowser) return;
     if (this.hiddenInput) return this.hiddenInput;
 
     const input = createHiddenFileInput();
