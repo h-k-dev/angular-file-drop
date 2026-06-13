@@ -95,7 +95,7 @@ export class AngularFileDrop {
   el = inject<ElementRef<HTMLElement>>(ElementRef);
   hiddenInput?: HTMLInputElement;
 
-  openPicker(event?: Event, options?: FilePickerOptions): void {
+  openPicker(event?: Event, options?: FilePickerOptions) {
     event?.preventDefault();
 
     if (this.disabled()) return;
@@ -107,16 +107,16 @@ export class AngularFileDrop {
     input.click();
   }
 
-  openDirectoryPicker(event?: Event): void {
+  openDirectoryPicker(event?: Event) {
     this.openPicker(event, { directory: true });
   }
 
-  openFilePicker(event?: Event): void {
+  openFilePicker(event?: Event) {
     this.openPicker(event, { directory: false });
   }
 
   // ─── Host Events ──────────────────────────────────────────────────────────
-  shouldIgnoreActivationTarget(event: Event): boolean {
+  shouldIgnoreActivationTarget(event: Event) {
     const target = event.target as HTMLElement | null;
     const closestIgnore = target?.closest(FILE_DND_IGNORE_SELECTOR);
     // Ignore if an interactive child was clicked, but do not ignore if the host ITSELF is the button/link
@@ -272,7 +272,7 @@ export class AngularFileDrop {
   }
 
   // ─── Validation ───────────────────────────────────────────────────────────
-  prepareFiles(files: DroppedFile[]): DroppedFile[] {
+  prepareFiles(files: DroppedFile[]) {
     const visible = this.ignoreHiddenFiles() ? filterHiddenFiles(files) : files;
     const accepted = filterAcceptedFiles(visible, this.acceptedFiles());
     return enforceMultiple(accepted, this.multiple());
