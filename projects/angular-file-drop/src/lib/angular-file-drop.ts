@@ -1,6 +1,6 @@
 import {
   booleanAttribute,
-  Component,
+  Directive,
   computed,
   DestroyRef,
   ElementRef,
@@ -27,15 +27,37 @@ import {
 
 export type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.types';
 
-@Component({
-  selector: 'lib-angular-file-drop',
-  imports: [],
-  template: ` <p>angular-file-drop works!</p> `,
-  styles: ``,
+@Directive({
+  selector: '[dropZone]',
+  exportAs: 'dropZone',
+  host: {
+    '(dragenter)': 'onDragEnter($event)',
+    '(dragover)': 'onDragOver($event)',
+    '(dragleave)': 'onDragLeave($event)',
+    '(drop)': 'onDrop($event)',
+    '(click)': 'onActivate($event)',
+    '(keydown.enter)': 'onActivate($event)',
+    '(keydown.space)': 'onActivate($event)',
+
+    // Host activation
+    '[attr.role]': 'hostActivationEnabled() ? "button" : null',
+    '[attr.tabindex]': 'hostActivationEnabled() ? (disabled() ? "-1" : "0") : null',
+    '[attr.aria-disabled]': 'hostActivationEnabled() && disabled() ? "true" : null',
+    '[style.cursor]': 'hostCanOpenPicker() ? "pointer" : "auto"',
+
+    // Global reset
+    '(document:dragleave)': 'onDocumentDragLeave($event)',
+    '(document:drop)': 'resetDragState()',
+    '(document:dragend)': 'resetDragState()',
+    '(window:blur)': 'resetDragState()',
+  },
 })
 export class AngularFileDrop {
   destroyRef = inject(DestroyRef);
 
+  /**
+   * Whether multiple files can be selected.
+   */
   multiple = input(true, { transform: booleanAttribute });
 
   /**
@@ -46,7 +68,10 @@ export class AngularFileDrop {
   directory = input(true, { transform: booleanAttribute });
   directoryPicker = input(false, { transform: booleanAttribute });
 
-  acceptedFiles = input<string | null>(null);
+  /**
+   * The accepted file types.
+   */
+  acceptedFiles = input('');
   ignoreHiddenFiles = input(true, { transform: booleanAttribute });
   clickable = input(true, { transform: booleanAttribute });
   disabled = input(false, { transform: booleanAttribute });
@@ -227,9 +252,10 @@ export class AngularFileDrop {
 
     input.addEventListener('change', onChange);
 
+    // Clean up the DOM element
+
     this.destroyRef.onDestroy(() => {
       input.removeEventListener('change', onChange);
-      // Clean up the DOM element
       input.remove();
       this.hiddenInput = undefined;
     });

@@ -7,7 +7,6 @@ export const FILE_DND_IGNORE_SELECTOR =
   'button,a,input,textarea,select,[contenteditable="true"],[data-file-dnd-ignore]';
 
 // ─── DragEvent Helpers ──────────────────────────────────────────────────────
-
 export function containsFiles(event: DragEvent) {
   if (!event.dataTransfer?.types) return false;
   return Array.from(event.dataTransfer.types).includes('Files');
