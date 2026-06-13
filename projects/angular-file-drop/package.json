@@ -1,6 +1,14 @@
 {
   "name": "@h-k-dev/angular-file-drop",
   "version": "0.0.0-development",
+  "keywords": [
+    "angular",
+    "file",
+    "drop",
+    "directive",
+    "file-drop",
+    "file-drop-directive"
+  ],
   "peerDependencies": {
     "@angular/common": "^17.3.0",
     "@angular/core": "^17.3.0"

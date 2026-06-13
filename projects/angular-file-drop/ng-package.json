@@ -1,6 +1,6 @@
 {
-  "$schema": "../../../node_modules/ng-packagr/ng-package.schema.json",
-  "dest": "../../../dist/h-k-dev/angular-file-drop",
+  "$schema": "../../node_modules/ng-packagr/ng-package.schema.json",
+  "dest": "../../dist/angular-file-drop",
   "lib": {
     "entryFile": "src/public-api.ts"
   }

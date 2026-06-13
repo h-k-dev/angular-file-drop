@@ -272,7 +272,7 @@ export function resolveDirectoryEntry(
  * Creates an invisible `<input type="file">` attached to `document.body`.
  * The caller is responsible for removing it again.
  */
-export function createHiddenFileInput(): HTMLInputElement {
+export function createHiddenFileInput() {
   const input = document.createElement('input');
   input.type = 'file';
 

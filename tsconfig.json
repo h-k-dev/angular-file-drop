@@ -4,7 +4,7 @@
   "compileOnSave": false,
   "compilerOptions": {
     "paths": {
-      "@h-k-dev/angular-file-drop": ["./dist/h-k-dev/angular-file-drop"]
+      "angular-file-drop": ["./dist/angular-file-drop"]
     },
     "strict": true,
     "noImplicitOverride": true,
