@@ -8,7 +8,7 @@ export const FILE_DND_IGNORE_SELECTOR =
 
 // ─── DragEvent Helpers ──────────────────────────────────────────────────────
 
-export function containsFiles(event: DragEvent): boolean {
+export function containsFiles(event: DragEvent) {
   if (!event.dataTransfer?.types) return false;
   return Array.from(event.dataTransfer.types).includes('Files');
 }
@@ -29,7 +29,7 @@ export function setDropEffect(event: DragEvent, dropEffect: DataTransfer['dropEf
  * A path is considered hidden if any of its segments starts with a dot
  * (e.g. `.git/config` or `folder/.DS_Store`).
  */
-export function isHiddenPath(relativePath: string): boolean {
+export function isHiddenPath(relativePath: string) {
   return relativePath.split('/').some((part) => part.length > 1 && part.startsWith('.'));
 }
 
@@ -40,7 +40,7 @@ export function filterHiddenFiles(files: DroppedFile[]): DroppedFile[] {
 /**
  * Matches a file against an `accept`-style string (e.g. `.png,image/*,application/pdf`).
  */
-export function isFileAccepted(file: File, acceptStr: string | null): boolean {
+export function isFileAccepted(file: File, acceptStr: string | null) {
   if (!acceptStr) return true;
 
   const accepted = acceptStr
