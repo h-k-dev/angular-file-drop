@@ -25,7 +25,7 @@ jobs:
       
       # ─── Runs your fast, headless Vitest suite ───
       - name: Run tests
-        run: bun run test:ci
+        run: bun run test
 
       # ─── Only builds if tests pass ───
       - name: Build library
