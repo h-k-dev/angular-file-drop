@@ -1,107 +1,15 @@
-# @h-k-dev/angular-file-drop
+# Angular File Drop
 
-A lightweight, signal-based Angular directive for drag-and-drop file and folder
-uploads. It supports directory traversal, `accept`-style type filtering, and
-click-to-open file/directory pickers — all from a single `dropZone` directive.
+An Angular-first directive that brings the core drag-and-drop functionality of Dropzone.js natively into the Angular ecosystem—without the bloat.
 
-- Standalone directive (no `NgModule`)
-- Signal inputs/outputs
-- Drag-and-drop **and** click-to-pick
-- Folder drops with recursive traversal (File System Access API, with
-  `webkitGetAsEntry` and `FileList` fallbacks)
-- `accept`-style filtering and hidden-file skipping
-- SSR-safe (the hidden `<input>` is only created in the browser)
+### The Philosophy
+Dropzone.js is great, but it often fights against modern Angular architecture by injecting its own CSS, mutating the DOM, and hijacking HTTP requests with its own XHR wrappers. 
 
-## Installation
+`angular-file-drop` is designed to be the "Angular-only" alternative. It does a portion of what Dropzone does, but does it strictly the Angular way:
 
-```bash
-npm install @h-k-dev/angular-file-drop
-```
+*   **Native Directives:** It binds seamlessly to your existing elements using standard Angular syntax.
+*   **Headless Design:** It handles the complex HTML5 drag-and-drop events and simply hands you the raw `File` objects.
+*   **Zero Network Opinions:** You handle the uploads using Angular's native `HttpClient`, keeping your interceptors and auth tokens intact.
+*   **Bring Your Own UI:** No forced stylesheets. Build and style your dropzone exactly how your app needs it.
 
-Requires Angular `>= 17.3`.
-
-## Usage
-
-Import the standalone directive and apply `dropZone` to any element:
-
-```ts
-import { Component } from '@angular/core';
-import { AngularFileDrop, FileDropEvent } from '@h-k-dev/angular-file-drop';
-
-@Component({
-  selector: 'app-uploader',
-  imports: [AngularFileDrop],
-  template: `
-    <div
-      dropZone
-      [acceptedFiles]="'image/*,.pdf'"
-      (fileDrop)="onDrop($event)"
-    >
-      Drop files here, or click to browse.
-    </div>
-  `,
-})
-export class UploaderComponent {
-  onDrop(event: FileDropEvent) {
-    for (const { file, relativePath } of event.files) {
-      console.log(relativePath, file);
-    }
-  }
-}
-```
-
-### Programmatic pickers
-
-Grab the directive via its exported reference to open pickers from code:
-
-```html
-<div dropZone #zone="dropZone" [isManualActivation]="true">
-  <button (click)="zone.openFilePicker($event)">Choose files</button>
-  <button (click)="zone.openDirectoryPicker($event)">Choose a folder</button>
-</div>
-```
-
-## Inputs
-
-| Input                | Type      | Default | Description                                                              |
-| -------------------- | --------- | ------- | ------------------------------------------------------------------------ |
-| `multiple`           | `boolean` | `true`  | Allow selecting more than one file.                                      |
-| `directory`          | `boolean` | `true`  | Traverse dropped folders recursively.                                    |
-| `directoryPicker`    | `boolean` | `false` | Open the click picker in directory mode (`webkitdirectory`).             |
-| `acceptedFiles`      | `string`  | `''`    | `accept`-style filter, e.g. `image/*,.pdf`.                              |
-| `ignoreHiddenFiles`  | `boolean` | `true`  | Skip dot-files such as `.DS_Store`.                                      |
-| `clickable`          | `boolean` | `true`  | Open the file picker when the host is clicked or activated by keyboard.  |
-| `disabled`           | `boolean` | `false` | Ignore drops and clicks.                                                 |
-| `isManualActivation` | `boolean` | `false` | Disable host click/keyboard activation (drive pickers programmatically). |
-
-## Outputs
-
-| Output      | Payload         | Description                               |
-| ----------- | --------------- | ----------------------------------------- |
-| `fileDrop`  | `FileDropEvent` | Emits the filtered files on drop or pick. |
-| `dragEnter` | `DragEvent`     | A file drag entered the zone.             |
-| `dragOver`  | `DragEvent`     | A file drag is over the zone.             |
-| `dragLeave` | `DragEvent`     | A file drag left the zone.                |
-
-`FileDropEvent.files` is an array of `DroppedFile`:
-
-```ts
-interface DroppedFile {
-  file: File;
-  relativePath: string; // e.g. "photos/2024/img.png" for folder drops
-}
-```
-
-## Accept-type helpers
-
-`FILE_TYPES` provides ready-made `accept` strings for common formats:
-
-```ts
-import { FILE_TYPES } from '@h-k-dev/angular-file-drop';
-
-acceptedFiles = `${FILE_TYPES.PDF},${FILE_TYPES.ANY_IMAGE}`;
-```
-
-## License
-
-MIT
+If you want the drag-and-drop ease of Dropzone but insist on keeping your codebase purely Angular, this directive is for you.

@@ -1,59 +1,15 @@
-# AngularFileDrop
+# Angular File Drop
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.11.
+An Angular-first directive that brings the core drag-and-drop functionality of Dropzone.js natively into the Angular ecosystem—without the bloat.
 
-## Development server
+### The Philosophy
+Dropzone.js is great, but it often fights against modern Angular architecture by injecting its own CSS, mutating the DOM, and hijacking HTTP requests with its own XHR wrappers. 
 
-To start a local development server, run:
+`angular-file-drop` is designed to be the "Angular-only" alternative. It does a portion of what Dropzone does, but does it strictly the Angular way:
 
-```bash
-ng serve
-```
+*   **Native Directives:** It binds seamlessly to your existing elements using standard Angular syntax.
+*   **Headless Design:** It handles the complex HTML5 drag-and-drop events and simply hands you the raw `File` objects.
+*   **Zero Network Opinions:** You handle the uploads using Angular's native `HttpClient`, keeping your interceptors and auth tokens intact.
+*   **Bring Your Own UI:** No forced stylesheets. Build and style your dropzone exactly how your app needs it.
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+If you want the drag-and-drop ease of Dropzone but insist on keeping your codebase purely Angular, this directive is for you.
