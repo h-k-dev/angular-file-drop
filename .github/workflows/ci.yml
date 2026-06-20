@@ -25,11 +25,11 @@ jobs:
       
       # ─── Runs your fast, headless Vitest suite ───
       - name: Run tests
-        run: bun run test
+        run: bun run test:ci
 
       # ─── Only builds if tests pass ───
       - name: Build library
-        run: bun run build angular-inline-svg
+        run: bun run build angular-file-drop
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
@@ -73,7 +73,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build library
-        run: bun run build angular-inline-svg
+        run: bun run build angular-file-drop
 
       # Publishes via npm OIDC Trusted Publishing — no NPM_TOKEN required.
       - name: Semantic Release
