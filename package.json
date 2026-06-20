@@ -1,5 +1,5 @@
 {
-  "name": "angular-file-drop",
+  "name": "@h-k-dev/angular-file-drop",
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",

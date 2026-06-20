@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publishes the already-built library to GitHub Packages.
 # Invoked by @semantic-release/exec AFTER @semantic-release/npm has published
-# to npmjs.org, so dist/angular-inline-svg/package.json already carries the
+# to npmjs.org, so dist/angular-file-drop/package.json already carries the
 # correct, semantic-release-computed version.
 #
 # Args:
@@ -13,7 +13,7 @@ VERSION="${1:-}"
 TAG="${2:-}"
 [ -z "$TAG" ] && TAG="latest"
 
-DIST_DIR="./dist/angular-inline-svg"
+DIST_DIR="./dist/angular-file-drop"
 PKG_JSON="${DIST_DIR}/package.json"
 NPMRC="$(mktemp)"
 trap 'rm -f "$NPMRC"' EXIT
