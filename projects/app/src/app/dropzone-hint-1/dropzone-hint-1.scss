@@ -1,0 +1,235 @@
+/* Import the math module to fix the Dart Sass deprecation warning */
+@use 'sass:math';
+
+:host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+
+  /* Swapped to inverse-surface for a deeper, moodier mystical vignette */
+  background: radial-gradient(circle, transparent 30%, var(--mat-sys-inverse-surface) 150%);
+}
+
+.hint-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  z-index: 5;
+}
+
+/* ========================================= */
+/* ICON & TEXT AURA                          */
+/* ========================================= */
+
+.icon-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hint-icon {
+  font-size: 6rem;
+  width: 6rem;
+  height: 6rem;
+  color: var(--mat-sys-primary);
+  /* Shifted glow to secondary-container */
+  filter: drop-shadow(0 0 25px var(--mat-sys-secondary-container));
+  animation: levitate 3.5s infinite ease-in-out;
+  z-index: 2;
+}
+
+.magic-ripple {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  /* Shifted ripple to secondary */
+  border: 2px solid var(--mat-sys-secondary);
+  animation: rippleOut 3s infinite cubic-bezier(0.1, 0.5, 0.5, 1);
+  z-index: 1;
+}
+
+.hint-text {
+  font-family: var(--mat-sys-title-medium-font);
+  font-size: var(--mat-sys-title-large-size);
+  font-weight: 700;
+  /* Text stays highly readable but glows with secondary */
+  color: var(--mat-sys-on-primary-container);
+  letter-spacing: 2px;
+  animation: textGlow 2s infinite alternate ease-in-out;
+}
+
+/* ========================================= */
+/* GHIBLI PARTICLE SYSTEM                    */
+/* ========================================= */
+
+.ghibli-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 1. MYSTIC LEAVES / PETALS */
+.petal {
+  position: absolute;
+  top: -15%;
+  /* Blending primary and secondary for the falling elements */
+  background: linear-gradient(135deg, var(--mat-sys-primary) 0%, var(--mat-sys-secondary) 100%);
+  border-radius: 15px 0 15px 0;
+
+  @for $i from 1 through 35 {
+    &:nth-child(#{$i}) {
+      /* Updated to math.random() */
+      $size: math.random(12) + 8px;
+
+      left: math.random(120) * 1% - 10%;
+      width: $size;
+      height: $size;
+
+      @if $i % 4 == 0 {
+        width: $size + 15px;
+        height: $size + 15px;
+        filter: blur(4px);
+        opacity: 0.8;
+        z-index: 10;
+      } @else {
+        filter: blur(1px);
+        opacity: 0.5;
+        z-index: 1;
+      }
+
+      /* Updated to math.random() */
+      animation:
+        fall math.random(2500) + 2000ms linear infinite,
+        sway math.random(3000) + 1500ms ease-in-out infinite alternate,
+        spin math.random(4000) + 2000ms linear infinite;
+
+      animation-delay: math.random(6000) * -1ms;
+    }
+  }
+}
+
+/* 2. SPIRIT MOTES (Glowing Orbs) */
+.mote {
+  position: absolute;
+  bottom: -10%;
+  border-radius: 50%;
+  /* Shifted motes to secondary colors */
+  background: var(--mat-sys-secondary-container);
+  box-shadow: 0 0 15px 3px var(--mat-sys-secondary);
+
+  @for $i from 1 through 20 {
+    &:nth-child(#{$i}) {
+      /* Updated to math.random() */
+      left: math.random(100) * 1%;
+      width: math.random(4) + 2px;
+      height: math.random(4) + 2px;
+      opacity: math.random(8) * 0.1;
+
+      animation:
+        floatUp math.random(4000) + 3000ms ease-in infinite,
+        pulseLight math.random(2000) + 1000ms alternate infinite ease-in-out;
+
+      animation-delay: math.random(5000) * -1ms;
+    }
+  }
+}
+
+/* ========================================= */
+/* KEYFRAMES                                 */
+/* ========================================= */
+
+@keyframes levitate {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-15px) scale(1.08);
+  }
+}
+
+@keyframes rippleOut {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(3.5);
+    opacity: 0;
+    border-width: 0px;
+  }
+}
+
+@keyframes textGlow {
+  from {
+    text-shadow: 0 0 5px transparent;
+    opacity: 0.9;
+  }
+  /* Glow shifted to secondary */
+  to {
+    text-shadow: 0 0 20px var(--mat-sys-secondary);
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes fall {
+  0% {
+    top: -15%;
+  }
+  100% {
+    top: 115%;
+  }
+}
+
+@keyframes sway {
+  0% {
+    transform: translateX(-60px);
+  }
+  100% {
+    transform: translateX(60px);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg) rotateX(0deg) rotateY(0deg);
+  }
+  100% {
+    transform: rotate(360deg) rotateX(360deg) rotateY(180deg);
+  }
+}
+
+@keyframes floatUp {
+  0% {
+    bottom: -10%;
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(20px);
+  }
+  100% {
+    bottom: 110%;
+    transform: translateX(-20px);
+  }
+}
+
+@keyframes pulseLight {
+  0% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 1;
+  }
+}

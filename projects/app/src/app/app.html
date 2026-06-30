@@ -1,0 +1,68 @@
+<mat-toolbar>
+  <div class="toolbar__actions">
+    <button matButton="outlined" (click)="zone1Uploads.set([])">
+      clear 1
+    </button>
+    <button matButton="outlined" (click)="zone2Uploads.set([])">
+      clear 2
+    </button>
+  </div>
+  <div class="spacer"></div>
+  <div class="toolbar__actions">
+    <button mat-icon-button (click)="toggleTheme()">
+      @if (theme() === 'dark') {
+      <mat-icon>dark_mode</mat-icon>
+      } @else {
+      <mat-icon>light_mode</mat-icon>
+      }
+    </button>
+
+    <button matButton (click)="zone2.openPicker()">
+      Zone 2 Upload
+    </button>
+  </div>
+</mat-toolbar>
+
+<main>
+  <div class="dropzone" id="dropzone-1" dropZone #zone1="dropZone" [class.drag-over]="zone1.isDragOver()"
+    (fileDrop)="onZone1Upload($event)">
+    @if (zone1.isDragOver()) {
+    <app-dropzone-hint-1></app-dropzone-hint-1>
+    } @else {
+    <p>Drop files or Click on Me to Upload</p>
+
+    @if (zone1Uploads().length > 0) {
+    <mat-list class="file-list">
+      @for (file of zone1Uploads(); track file.name) {
+      <mat-list-item>
+        <mat-icon matListItemIcon>insert_drive_file</mat-icon>
+        <div matListItemTitle>{{ file.name }}</div>
+        <div matListItemLine>{{ file.size | fileSize }} • {{ file.type || 'Unknown type' }}</div>
+      </mat-list-item>
+      }
+    </mat-list>
+    }
+    }
+  </div>
+
+  <div class="dropzone" id="dropzone-2" dropZone #zone2="dropZone" [class.drag-over]="zone2.isDragOver()"
+    (fileDrop)="onZone2Upload($event)" isManualActivation>
+    @if (zone2.isDragOver()) {
+    <app-dropzone-hint-2></app-dropzone-hint-2>
+    } @else {
+    <p>Drop files (Manual Activation)</p>
+
+    @if (zone2Uploads().length > 0) {
+    <mat-list class="file-list">
+      @for (file of zone2Uploads(); track file.name) {
+      <mat-list-item>
+        <mat-icon matListItemIcon>insert_drive_file</mat-icon>
+        <div matListItemTitle>{{ file.name }}</div>
+        <div matListItemLine>{{ file.size | fileSize }} • {{ file.type || 'Unknown type' }}</div>
+      </mat-list-item>
+      }
+    </mat-list>
+    }
+    }
+  </div>
+</main>

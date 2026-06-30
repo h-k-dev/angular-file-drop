@@ -1,0 +1,106 @@
+// ─── Host layout ─────────────────────────────────────────────────────────────
+:host {
+  display: flex;
+  flex-direction: column;
+  /* Use 100dvh (dynamic viewport height) to ensure it fills the screen perfectly */
+  height: 100dvh;
+  width: 100%;
+  background-color: var(--mat-sys-background);
+  color: var(--mat-sys-on-background);
+}
+
+.toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+// ─── Main Container ──────────────────────────────────────────────────────────
+/* Target the element directly since you didn't have class="main" in your HTML */
+main {
+  display: flex;
+  flex-direction: row;
+  flex: 1; /* This forces <main> to take up all remaining height below toolbar */
+  gap: 16px; /* Standard M3 spacing */
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+// ─── Dropzone Shared Styles ──────────────────────────────────────────────────
+.dropzone {
+  flex: 1; /* This forces both zones to take up exactly 50% of the width */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  /* Material 3 aesthetics */
+  border-radius: 16px;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  box-sizing: border-box;
+  padding: 2rem;
+  text-align: center;
+}
+
+// ─── Individual Dropzone Styling ─────────────────────────────────────────────
+/* Zone 1: Subtle surface style */
+#dropzone-1 {
+  background-color: var(--mat-sys-surface-container-low);
+  border: 2px dashed var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+#dropzone-1:hover {
+  background-color: var(--mat-sys-surface-container);
+  border-color: var(--mat-sys-outline);
+}
+
+/* Zone 2: Slightly darker/contrasting surface style */
+#dropzone-2 {
+  background-color: var(--mat-sys-surface-variant);
+  border: 2px dashed var(--mat-sys-outline);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+#dropzone-2:hover {
+  background-color: var(--mat-sys-surface-container-highest);
+}
+
+// ─── Active Drag State (M3 Primary Tokens) ───────────────────────────────────
+/* Triggers when a file is held over the dropzone */
+.dropzone.drag-over {
+  background-color: var(--mat-sys-primary-container) !important;
+  border-color: var(--mat-sys-primary) !important;
+  border-style: solid !important;
+  color: var(--mat-sys-on-primary-container) !important;
+  transform: scale(1.01); /* Slight pop effect */
+}
+
+// ─── File List Styles ────────────────────────────────────────────────────────
+.file-list {
+  width: 100%;
+  max-width: 400px; /* Prevents it from getting too wide */
+  max-height: 250px;
+  overflow-y: auto;
+  text-align: left;
+  margin-top: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+@media (max-width: 1024px) {
+  main {
+    flex-direction: column; /* Stack zones vertically */
+    overflow-y: auto; /* Ensure the content is scrollable if needed */
+  }
+
+  .dropzone {
+    width: 100%; /* Allow them to span the full width */
+    flex: none; /* Remove flex growth to respect height/content */
+    min-height: 300px; /* Maintain a good drop target size when stacked */
+  }
+}
