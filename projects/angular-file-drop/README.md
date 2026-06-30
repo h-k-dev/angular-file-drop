@@ -7,6 +7,8 @@ A lightweight, **signal-based** Angular directive for drag-and-drop file and fol
 
 ## The Philosophy
 
+**[Try the live demo →](https://h-k-dev.github.io/angular-file-drop/angular-file-drop/)**
+
 Dropzone.js is great, but it often fights against modern Angular architecture by injecting its own CSS, mutating the DOM, and hijacking HTTP requests with its own XHR wrappers.
 
 `angular-file-drop` is the "Angular-only" alternative. It does a portion of what Dropzone does, but strictly the Angular way:
