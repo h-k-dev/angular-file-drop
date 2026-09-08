@@ -1,68 +1,123 @@
-<mat-toolbar>
-  <div class="toolbar__actions">
-    <button matButton="outlined" (click)="zone1Uploads.set([])">
-      clear 1
-    </button>
-    <button matButton="outlined" (click)="zone2Uploads.set([])">
-      clear 2
-    </button>
-  </div>
-  <div class="spacer"></div>
-  <div class="toolbar__actions">
-    <button mat-icon-button (click)="toggleTheme()">
-      @if (theme() === 'dark') {
-      <mat-icon>dark_mode</mat-icon>
+<!-- Zone 3: the whole application. The biggest target on the page, wrapped
+     around the other two — the pattern behind "drop a file anywhere".
+
+     `selfOnly` is what makes that safe: zones 1 and 2 sit inside this one, and
+     without it a drag over either of them would light this zone up too (a
+     disabled inner zone does not claim the drag on the way past). With it,
+     anything landing inside a nested zone is structurally not this zone's.
+
+     `[multiple]="false"` plus a document-only filter: it takes exactly one
+     document, and shows it in the middle of the toolbar. -->
+<div
+  class="app-shell"
+  dropZone
+  #appZone="dropZone"
+  selfOnly
+  [multiple]="false"
+  [clickable]="false"
+  [acceptedFiles]="documentTypes"
+  [class.app-shell--drag-over]="appZone.isDragOver()"
+  (fileDrop)="onDocumentDrop($event)"
+>
+  <mat-toolbar>
+    <div class="toolbar__actions">
+      <button matButton="outlined" (click)="zone1Uploads.set([])">clear 1</button>
+      <button matButton="outlined" (click)="zone2Uploads.set([])">clear 2</button>
+    </div>
+
+    <!-- The middle of the bar belongs to zone 3: the hint while a document is
+         in flight, the document itself once one has landed. -->
+    <div class="toolbar__centre">
+      @if (appZone.isDragOver()) {
+        <app-dropzone-hint-3 />
+      } @else if (activeDocument(); as doc) {
+        <div class="active-doc">
+          <mat-icon class="active-doc__icon">description</mat-icon>
+          <span class="active-doc__name" [title]="doc.name">{{ doc.name }}</span>
+          <span class="active-doc__meta">{{ doc.size | fileSize }}</span>
+          <button
+            mat-icon-button
+            class="active-doc__clear"
+            aria-label="Clear the active document"
+            (click)="activeDocument.set(null)"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+
+    <div class="toolbar__actions">
+      <button mat-icon-button (click)="toggleTheme()">
+        @if (theme() === 'dark') {
+          <mat-icon>dark_mode</mat-icon>
+        } @else {
+          <mat-icon>light_mode</mat-icon>
+        }
+      </button>
+
+      <button matButton (click)="zone2.openPicker()">Zone 2 Upload</button>
+    </div>
+  </mat-toolbar>
+
+  <main>
+    <div
+      class="dropzone"
+      id="dropzone-1"
+      dropZone
+      #zone1="dropZone"
+      [class.drag-over]="zone1.isDragOver()"
+      (fileDrop)="onZone1Upload($event)"
+    >
+      @if (zone1.isDragOver()) {
+        <app-dropzone-hint-1></app-dropzone-hint-1>
       } @else {
-      <mat-icon>light_mode</mat-icon>
+        <p>Drop files or Click on Me to Upload</p>
+
+        @if (zone1Uploads().length > 0) {
+          <mat-list class="file-list">
+            @for (file of zone1Uploads(); track file.name) {
+              <mat-list-item>
+                <mat-icon matListItemIcon>insert_drive_file</mat-icon>
+                <div matListItemTitle>{{ file.name }}</div>
+                <div matListItemLine>
+                  {{ file.size | fileSize }} • {{ file.type || 'Unknown type' }}
+                </div>
+              </mat-list-item>
+            }
+          </mat-list>
+        }
       }
-    </button>
+    </div>
 
-    <button matButton (click)="zone2.openPicker()">
-      Zone 2 Upload
-    </button>
-  </div>
-</mat-toolbar>
+    <div
+      class="dropzone"
+      id="dropzone-2"
+      dropZone
+      #zone2="dropZone"
+      [class.drag-over]="zone2.isDragOver()"
+      (fileDrop)="onZone2Upload($event)"
+      isManualActivation
+    >
+      @if (zone2.isDragOver()) {
+        <app-dropzone-hint-2></app-dropzone-hint-2>
+      } @else {
+        <p>Drop files (Manual Activation)</p>
 
-<main>
-  <div class="dropzone" id="dropzone-1" dropZone #zone1="dropZone" [class.drag-over]="zone1.isDragOver()"
-    (fileDrop)="onZone1Upload($event)">
-    @if (zone1.isDragOver()) {
-    <app-dropzone-hint-1></app-dropzone-hint-1>
-    } @else {
-    <p>Drop files or Click on Me to Upload</p>
-
-    @if (zone1Uploads().length > 0) {
-    <mat-list class="file-list">
-      @for (file of zone1Uploads(); track file.name) {
-      <mat-list-item>
-        <mat-icon matListItemIcon>insert_drive_file</mat-icon>
-        <div matListItemTitle>{{ file.name }}</div>
-        <div matListItemLine>{{ file.size | fileSize }} • {{ file.type || 'Unknown type' }}</div>
-      </mat-list-item>
+        @if (zone2Uploads().length > 0) {
+          <mat-list class="file-list">
+            @for (file of zone2Uploads(); track file.name) {
+              <mat-list-item>
+                <mat-icon matListItemIcon>insert_drive_file</mat-icon>
+                <div matListItemTitle>{{ file.name }}</div>
+                <div matListItemLine>
+                  {{ file.size | fileSize }} • {{ file.type || 'Unknown type' }}
+                </div>
+              </mat-list-item>
+            }
+          </mat-list>
+        }
       }
-    </mat-list>
-    }
-    }
-  </div>
-
-  <div class="dropzone" id="dropzone-2" dropZone #zone2="dropZone" [class.drag-over]="zone2.isDragOver()"
-    (fileDrop)="onZone2Upload($event)" isManualActivation>
-    @if (zone2.isDragOver()) {
-    <app-dropzone-hint-2></app-dropzone-hint-2>
-    } @else {
-    <p>Drop files (Manual Activation)</p>
-
-    @if (zone2Uploads().length > 0) {
-    <mat-list class="file-list">
-      @for (file of zone2Uploads(); track file.name) {
-      <mat-list-item>
-        <mat-icon matListItemIcon>insert_drive_file</mat-icon>
-        <div matListItemTitle>{{ file.name }}</div>
-        <div matListItemLine>{{ file.size | fileSize }} • {{ file.type || 'Unknown type' }}</div>
-      </mat-list-item>
-      }
-    </mat-list>
-    }
-    }
-  </div>
-</main>
+    </div>
+  </main>
+</div>

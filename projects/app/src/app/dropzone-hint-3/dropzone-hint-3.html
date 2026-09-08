@@ -1,0 +1,111 @@
+<div class="sky">
+  <!-- Drifting the other way to the courier, which is what makes her look
+       like she is travelling rather than hovering. -->
+  @for (c of clouds; track $index) {
+    <span class="cloud" aria-hidden="true"></span>
+  }
+  @for (m of motes; track $index) {
+    <span class="mote" aria-hidden="true"></span>
+  }
+
+  <!-- The courier: one parcel, one delivery, on a loop. Two nested elements
+       on purpose — the outer one carries her across, the inner one bobs — so
+       the flight path is a sine wave without a single keyframe of maths. -->
+  <span class="flight" aria-hidden="true">
+    <span class="bob">
+      <!-- She travels to the right, so everything loose on her — bristles,
+           cloak, hair — trails to the left. That one rule is most of what
+           makes a 20px silhouette read as flight rather than a sticker. -->
+      <svg class="courier" viewBox="0 0 64 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- The broom, bristles at the back. -->
+        <path
+          class="courier__broom"
+          d="M13 24 H57"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        />
+        <path
+          class="courier__bristles"
+          d="M13 24 L2 18 M13 24 L1 24 M13 24 L2 30"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        />
+
+        <!-- The cloak, sweeping back off the shoulders to a point. Drawn
+             before the body so the body sits in front of it. -->
+        <path
+          class="courier__cloak"
+          d="M38 13 C30 15 24 20 20 27 C27 26 32 25 36 23 Z"
+          fill="currentColor"
+        />
+
+        <!-- Seat, torso, and a leg bent forward over the handle. -->
+        <path
+          class="courier__body"
+          d="M32 24 C33 18 35 14 39 12 L42 15 C40 18 38 21 38 24 Z"
+          fill="currentColor"
+        />
+        <path
+          class="courier__leg"
+          d="M37 23 L44 25 L47 21"
+          stroke="currentColor"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          class="courier__arm"
+          d="M40 16 L47 21"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        />
+
+        <circle class="courier__head" cx="42" cy="8" r="4.2" fill="currentColor" />
+
+        <!-- Hair and the ribbon behind it: the only lines that move
+             independently, and the ones that read as wind at this size. -->
+        <path
+          class="courier__hair"
+          d="M39 6 C34 5 31 7 29 10"
+          stroke="currentColor"
+          stroke-width="2.6"
+          stroke-linecap="round"
+        />
+        <path
+          class="courier__ribbon"
+          d="M38 4 C33 1 28 3 25 6"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        />
+
+        <!-- The delivery: one parcel, slung at the front of the broom where
+             she can see it. -->
+        <g class="courier__parcel">
+          <rect
+            x="48"
+            y="26"
+            width="11"
+            height="8"
+            rx="1.5"
+            fill="var(--mat-sys-surface-bright)"
+            stroke="currentColor"
+            stroke-width="1.4"
+          />
+          <path d="M53.5 26 V34" stroke="currentColor" stroke-width="1.2" />
+        </g>
+      </svg>
+    </span>
+  </span>
+
+  <p class="sky__label">
+    Deliver a document
+    <span class="sky__rule">
+      <span class="sky__count">1</span>
+      at a time
+    </span>
+  </p>
+</div>

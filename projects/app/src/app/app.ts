@@ -21,10 +21,12 @@ import {
   AngularFileDrop,
   FileDropEvent,
 } from '../../../angular-file-drop/src/lib/angular-file-drop';
+import { FILE_TYPES } from '../../../angular-file-drop/src/lib/files.enum';
 
 // Components
 import { DropzoneHint1 } from './dropzone-hint-1/dropzone-hint-1';
 import { DropzoneHint2 } from './dropzone-hint-2/dropzone-hint-2';
+import { DropzoneHint3 } from './dropzone-hint-3/dropzone-hint-3';
 
 @Pipe({
   name: 'fileSize',
@@ -59,6 +61,7 @@ export class FileSizePipe implements PipeTransform {
     // Components
     DropzoneHint1,
     DropzoneHint2,
+    DropzoneHint3,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -93,5 +96,33 @@ export class App {
 
   onZone2Upload(event: FileDropEvent) {
     this.zone2Uploads.update((uploads) => [...uploads, ...event.files.map((f) => f.file)]);
+  }
+
+  // ─── Zone 3: the application itself ─────────────────────────────────────
+
+  /**
+   * What zone 3 takes: text documents, nothing else. Composed from the
+   * library's `FILE_TYPES` map rather than a hand-written accept string, so
+   * each entry carries both the extension and the MIME type — a `.docx` sent
+   * by a system that forgot its MIME type still matches.
+   */
+  protected readonly documentTypes = [
+    FILE_TYPES.PDF,
+    FILE_TYPES.DOC,
+    FILE_TYPES.DOCX,
+    FILE_TYPES.TXT,
+    FILE_TYPES.RTF,
+  ].join(',');
+
+  /**
+   * A single document, not a list: zone 3 is `[multiple]="false"`, so a drop
+   * of five replaces whatever was there with the first one that passes the
+   * filter. The signal being a `File | null` rather than an array is the
+   * model saying the same thing the zone does.
+   */
+  activeDocument = signal<File | null>(null);
+
+  onDocumentDrop(event: FileDropEvent) {
+    this.activeDocument.set(event.files[0]?.file ?? null);
   }
 }

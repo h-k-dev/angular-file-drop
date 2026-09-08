@@ -15,12 +15,15 @@ import {
 
 import type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.types';
 import {
+  claimDragEvent,
   containsFiles,
   createHiddenFileInput,
   enforceMultiple,
   FILE_DND_IGNORE_SELECTOR,
   filterAcceptedFiles,
   filterHiddenFiles,
+  isDragEventClaimed,
+  isNearestDropZone,
   readDroppedFiles,
   setDropEffect,
   toDroppedFiles,
@@ -40,6 +43,12 @@ export type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.type
     '(click)': 'onActivate($event)',
     '(keydown.enter)': 'onActivate($event)',
     '(keydown.space)': 'onActivate($event)',
+
+    // How one zone recognises another in the DOM, whatever the template
+    // called the selector. `selfOnly` reads it, through the exported
+    // DROP_ZONE_ATTRIBUTE — spelled out here because a host binding key has
+    // to be a literal, so the two are kept in step by this comment alone.
+    '[attr.data-drop-zone]': '""',
 
     // Host activation
     '[attr.role]': 'hostActivationEnabled() ? "button" : null',
@@ -78,6 +87,24 @@ export class AngularFileDrop {
   clickable = input(true, { transform: booleanAttribute });
   disabled = input(false, { transform: booleanAttribute });
   isManualActivation = input(false, { transform: booleanAttribute });
+
+  /**
+   * Only respond to drags that land on this zone rather than on a dropzone
+   * nested inside it.
+   *
+   * Nesting already works without this: an inner zone claims the event and
+   * the outer one stands down. But that is a *behavioural* guarantee — it
+   * depends on the inner zone actually handling the drop. Set `selfOnly` and
+   * the guarantee becomes *structural*: a drop that lands inside a nested
+   * zone is never this zone's, even if that zone is disabled, rejected every
+   * file, or is still waiting on an async read.
+   *
+   * Use it for an outer zone that means something different from the inner
+   * one — a page that imports a document, wrapped around an editor that
+   * attaches files — where an outer zone quietly picking up the inner zone's
+   * leftovers would be wrong rather than merely surprising.
+   */
+  selfOnly = input(false, { transform: booleanAttribute });
 
   hostActivationEnabled = computed(() => this.clickable() && !this.isManualActivation());
   hostCanOpenPicker = computed(() => this.hostActivationEnabled() && !this.disabled());
@@ -128,20 +155,51 @@ export class AngularFileDrop {
     this.openPicker(event);
   }
 
+  /**
+   * Whether this zone should act on a drag event: it has to carry files, no
+   * nested handler may have claimed it, and — under `selfOnly` — it has to
+   * have landed on this zone rather than one inside it.
+   *
+   * Callers that already know the event carries files still get the check;
+   * it is cheap, and the guarantee is easier to reason about than the
+   * shortcut.
+   */
+  shouldHandle(event: DragEvent) {
+    if (!containsFiles(event) || isDragEventClaimed(event)) return false;
+    return !this.selfOnly() || isNearestDropZone(event, this.el.nativeElement);
+  }
+
   onDragEnter(event: DragEvent) {
-    if (!containsFiles(event) || event.defaultPrevented) return;
+    if (!containsFiles(event)) return;
+    // Declining is not the same as ignoring. The drag is inside this zone —
+    // it just belongs to something nested — so any highlight this zone is
+    // still showing is now a lie, and `dragleave` will not correct it: moving
+    // from a zone into a child of that zone fires a leave whose relatedTarget
+    // the zone still contains, which the leave handler (rightly) treats as
+    // staying put.
+    if (!this.shouldHandle(event)) {
+      this.resetDragState();
+      return;
+    }
     if (this.disabled()) {
       this.resetDragState();
       return;
     }
 
     event.preventDefault();
+    claimDragEvent(event);
     this.isDragOver.set(true);
     this.dragEnter.emit(event);
   }
 
   onDragOver(event: DragEvent) {
-    if (!containsFiles(event) || event.defaultPrevented) return;
+    if (!containsFiles(event)) return;
+    // As above — and this is the one that actually rescues a stuck highlight,
+    // because `dragover` keeps firing for as long as the pointer is moving.
+    if (!this.shouldHandle(event)) {
+      this.resetDragState();
+      return;
+    }
     if (this.disabled()) {
       event.preventDefault();
       setDropEffect(event, 'none');
@@ -150,6 +208,7 @@ export class AngularFileDrop {
     }
 
     event.preventDefault();
+    claimDragEvent(event);
 
     // Mirror Dropzone.js effectAllowed logic
     try {
@@ -164,7 +223,11 @@ export class AngularFileDrop {
   }
 
   onDragLeave(event: DragEvent) {
+    // Not `shouldHandle`: leaving is how a zone stops showing a drag it was
+    // already showing, so it must not be gated on the claim (this zone may
+    // be the one that claimed it) — only on `selfOnly`, which is structural.
     if (!containsFiles(event)) return;
+    if (this.selfOnly() && !isNearestDropZone(event, this.el.nativeElement)) return;
 
     if (this.disabled()) {
       this.resetDragState();
@@ -194,8 +257,10 @@ export class AngularFileDrop {
   async onDrop(event: DragEvent) {
     if (!containsFiles(event)) return;
 
-    // Another, more specific dropzone already handled it.
-    if (event.defaultPrevented) {
+    // Another, more specific handler already took it — a nested dropzone, or
+    // anything that called `claimDragEvent` / `preventDefault`. Under
+    // `selfOnly`, a drop inside a nested zone is likewise not ours.
+    if (!this.shouldHandle(event)) {
       this.resetDragState();
       return;
     }
@@ -207,6 +272,7 @@ export class AngularFileDrop {
     }
 
     event.preventDefault();
+    claimDragEvent(event);
 
     // Do not stop propagation; parent directives and document listeners can reset.
     this.resetDragState();

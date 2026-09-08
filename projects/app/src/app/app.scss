@@ -9,14 +9,83 @@
   color: var(--mat-sys-on-background);
 }
 
+// ─── Zone 3: the application shell ───────────────────────────────────────────
+/* Takes over the layout the host used to hold, so the whole app is one drop
+   target without changing what anything inside it looks like. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The page-wide zone announces itself around the edge rather than over the
+   content: the two panels inside have their own, louder drag states, and
+   three things lighting up at once would say nothing. `inset` so the outline
+   is not clipped by the viewport. */
+.app-shell--drag-over {
+  outline: 2px dashed var(--mat-sys-primary);
+  outline-offset: -6px;
+  border-radius: 8px;
+}
+
 .toolbar__actions {
   display: flex;
   align-items: center;
   gap: 0.25rem;
 }
 
-.spacer {
+/* Was `.spacer`: still absorbs the free space between the two button groups,
+   but now it is also where zone 3 reports — the hint while a document is in
+   flight, the accepted document afterwards. `min-width: 0` so a long filename
+   ellipsizes instead of pushing the buttons off the bar. */
+.toolbar__centre {
   flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The one document zone 3 is holding. */
+.active-doc {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.15rem 0.15rem 0.15rem 0.7rem;
+
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 999px;
+  background-color: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+  font-size: var(--mat-sys-body-medium-size);
+}
+
+.active-doc__icon {
+  flex: none;
+  color: var(--mat-sys-primary);
+}
+
+/* Takes the slack and gives it back: `min-width: 0` is what lets the name
+   ellipsize rather than shove the clear button out of the pill. */
+.active-doc__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-doc__meta {
+  flex: none;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: var(--mat-sys-body-small-size);
+}
+
+.active-doc__clear {
+  flex: none;
 }
 
 // ─── Main Container ──────────────────────────────────────────────────────────

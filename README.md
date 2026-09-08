@@ -8,6 +8,7 @@ A lightweight, **signal-based** Angular directive for drag-and-drop file and fol
 > This is the workspace repository. The published package lives in [`projects/angular-file-drop`](./projects/angular-file-drop).
 
 ## The Philosophy
+
 **[Try the live demo →](https://h-k-dev.github.io/angular-file-drop)**
 
 Dropzone.js is great, but it often fights against modern Angular architecture by injecting its own CSS, mutating the DOM, and hijacking HTTP requests with its own XHR wrappers.
@@ -88,9 +89,7 @@ import { FILE_TYPES } from '@h-k-dev/angular-file-drop';
 @Component({
   imports: [AngularFileDrop],
   template: `
-    <div dropZone [acceptedFiles]="accept" (fileDrop)="onDrop($event)">
-      Images and PDFs only
-    </div>
+    <div dropZone [acceptedFiles]="accept" (fileDrop)="onDrop($event)">Images and PDFs only</div>
   `,
 })
 export class Component {
@@ -103,9 +102,7 @@ You can also write the string by hand: `[acceptedFiles]="'.png,.jpg,image/*'"`.
 ### Single file only
 
 ```html
-<div dropZone [multiple]="false" (fileDrop)="onDrop($event)">
-  Drop a single file
-</div>
+<div dropZone [multiple]="false" (fileDrop)="onDrop($event)">Drop a single file</div>
 ```
 
 ### Drop a whole folder
@@ -173,6 +170,62 @@ export class Component {
 <div dropZone [disabled]="isUploading" (fileDrop)="onDrop($event)">…</div>
 ```
 
+### Nested zones
+
+Zones nest. A drop is handled by the innermost zone it lands in, and the ones
+around it stand down — no configuration needed:
+
+```html
+<!-- The page imports a document; the editor inside attaches files. -->
+<div dropZone acceptedFiles=".eml" (fileDrop)="importMessage($event)">
+  <div class="editor" dropZone (fileDrop)="attachFiles($event)">…</div>
+</div>
+```
+
+A zone stands down when something else has **claimed** the event. Two things
+count as a claim: `preventDefault()`, and `claimDragEvent()`.
+
+`preventDefault()` is the conventional signal, and it still works — but it is
+shared. Editors, canvases and sortable lists all call it for reasons of their
+own, and a handler that _wants_ the browser default has no way to say "this
+drop is mine". `claimDragEvent` is the unambiguous version, and any handler can
+use it — it does not have to be a dropzone:
+
+```ts
+import { claimDragEvent } from '@h-k-dev/angular-file-drop';
+
+// A ProseMirror plugin that embeds dropped images inline, and wants the
+// surrounding attachment dropzone to leave them alone.
+handleDrop(view, event) {
+  if (!isImageDrop(event)) return false;   // not ours: the zone outside takes it
+  claimDragEvent(event);
+  insertImages(view, event.dataTransfer.files);
+  return true;
+}
+```
+
+#### `selfOnly`
+
+Claiming is a _behavioural_ guarantee: it depends on the inner zone actually
+running. `selfOnly` makes it **structural** — a drag that lands inside a nested
+zone is never this zone's, whatever that zone did with it:
+
+```html
+<div dropZone selfOnly (fileDrop)="importMessage($event)">
+  <div dropZone [disabled]="readOnly()" (fileDrop)="attachFiles($event)">…</div>
+</div>
+```
+
+Without `selfOnly`, dragging over the _disabled_ inner zone highlights the
+outer one — which then refuses the drop, because a disabled zone rejects it
+rather than passing it up. `selfOnly` stops the outer zone advertising a drop
+it will not accept. Reach for it when the two zones _mean_ different things, so
+the outer one quietly picking up the inner one's leftovers would be wrong
+rather than merely surprising.
+
+Zones recognise each other through the `data-drop-zone` attribute the
+directive puts on every host, so this works however you wrote the selector.
+
 ### Upload with HttpClient
 
 The directive stays out of your network layer — wire it up however you like.
@@ -189,34 +242,35 @@ onDrop(event: FileDropEvent) {
 
 ### Inputs
 
-| Input               | Type      | Default | Description                                                                                 |
-| ------------------- | --------- | ------- | ------------------------------------------------------------------------------------------- |
-| `multiple`          | `boolean` | `true`  | Allow more than one file. When `false`, only the first file is emitted.                     |
-| `directory`         | `boolean` | `true`  | Recursively traverse dropped folders.                                                       |
-| `directoryPicker`   | `boolean` | `false` | Make the click-to-open dialog a **folder** picker (`webkitdirectory`) rather than files.    |
-| `acceptedFiles`     | `string`  | `''`    | `accept`-style filter, e.g. `.png,image/*,application/pdf`. Empty accepts everything.       |
-| `ignoreHiddenFiles` | `boolean` | `true`  | Drop dotfiles and files inside dot-folders (`.git`, `.DS_Store`, …).                         |
-| `clickable`         | `boolean` | `true`  | Open the file picker when the host element is clicked or activated via keyboard.            |
-| `disabled`          | `boolean` | `false` | Ignore all drops, clicks, and keyboard activation.                                          |
-| `isManualActivation`| `boolean` | `false` | Disable built-in click/keyboard activation so you can call the `open*` methods yourself.    |
+| Input                | Type      | Default | Description                                                                                                      |
+| -------------------- | --------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `multiple`           | `boolean` | `true`  | Allow more than one file. When `false`, only the first file is emitted.                                          |
+| `directory`          | `boolean` | `true`  | Recursively traverse dropped folders.                                                                            |
+| `directoryPicker`    | `boolean` | `false` | Make the click-to-open dialog a **folder** picker (`webkitdirectory`) rather than files.                         |
+| `acceptedFiles`      | `string`  | `''`    | `accept`-style filter, e.g. `.png,image/*,application/pdf`. Empty accepts everything.                            |
+| `ignoreHiddenFiles`  | `boolean` | `true`  | Drop dotfiles and files inside dot-folders (`.git`, `.DS_Store`, …).                                             |
+| `clickable`          | `boolean` | `true`  | Open the file picker when the host element is clicked or activated via keyboard.                                 |
+| `disabled`           | `boolean` | `false` | Ignore all drops, clicks, and keyboard activation.                                                               |
+| `isManualActivation` | `boolean` | `false` | Disable built-in click/keyboard activation so you can call the `open*` methods yourself.                         |
+| `selfOnly`           | `boolean` | `false` | Ignore drags that land inside a **nested** dropzone, rather than on this one. See [Nested zones](#nested-zones). |
 
 ### Outputs
 
-| Output      | Payload          | Description                                              |
-| ----------- | ---------------- | ------------------------------------------------------- |
-| `fileDrop`  | `FileDropEvent`  | Emitted after files are dropped or chosen and filtered. |
-| `dragEnter` | `DragEvent`      | A valid file drag entered the element.                  |
-| `dragOver`  | `DragEvent`      | A valid file drag is moving over the element.           |
-| `dragLeave` | `DragEvent`      | A valid file drag left the element.                     |
+| Output      | Payload         | Description                                             |
+| ----------- | --------------- | ------------------------------------------------------- |
+| `fileDrop`  | `FileDropEvent` | Emitted after files are dropped or chosen and filtered. |
+| `dragEnter` | `DragEvent`     | A valid file drag entered the element.                  |
+| `dragOver`  | `DragEvent`     | A valid file drag is moving over the element.           |
+| `dragLeave` | `DragEvent`     | A valid file drag left the element.                     |
 
 ### Public members
 
-| Member                          | Description                                                        |
-| ------------------------------- | ------------------------------------------------------------------ |
-| `isDragOver: Signal<boolean>`   | `true` while a valid file drag is over the element.                |
-| `openPicker(event?, options?)`  | Open the hidden file input. `options.directory` toggles folder mode. |
-| `openFilePicker(event?)`        | Open a file picker.                                                |
-| `openDirectoryPicker(event?)`   | Open a folder picker.                                              |
+| Member                         | Description                                                          |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `isDragOver: Signal<boolean>`  | `true` while a valid file drag is over the element.                  |
+| `openPicker(event?, options?)` | Open the hidden file input. `options.directory` toggles folder mode. |
+| `openFilePicker(event?)`       | Open a file picker.                                                  |
+| `openDirectoryPicker(event?)`  | Open a folder picker.                                                |
 
 Access these in templates via the `dropZone` export: `#zone="dropZone"`.
 
@@ -235,7 +289,7 @@ interface FileDropEvent {
 
 ### Exported utilities
 
-The directive's pure helpers are exported for advanced use and testing: `containsFiles`, `setDropEffect`, `isHiddenPath`, `filterHiddenFiles`, `isFileAccepted`, `filterAcceptedFiles`, `enforceMultiple`, `toDroppedFiles`, `readDroppedFiles`, `walkHandles`, `walkEntries`, `createHiddenFileInput`, and the `FILE_TYPES` map.
+The directive's pure helpers are exported for advanced use and testing: `containsFiles`, `setDropEffect`, `isHiddenPath`, `filterHiddenFiles`, `isFileAccepted`, `filterAcceptedFiles`, `enforceMultiple`, `toDroppedFiles`, `readDroppedFiles`, `walkHandles`, `walkEntries`, `createHiddenFileInput`, `claimDragEvent`, `isDragEventClaimed`, `isNearestDropZone`, `DROP_ZONE_ATTRIBUTE`, and the `FILE_TYPES` map.
 
 ## Development
 

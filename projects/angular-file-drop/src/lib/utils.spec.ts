@@ -2,14 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DroppedFile } from './files.types';
 import {
+  claimDragEvent,
   containsFiles,
   createHiddenFileInput,
+  DROP_ZONE_ATTRIBUTE,
   enforceMultiple,
   FILE_DND_IGNORE_SELECTOR,
   filterAcceptedFiles,
   filterHiddenFiles,
+  isDragEventClaimed,
   isFileAccepted,
   isHiddenPath,
+  isNearestDropZone,
   readDroppedFiles,
   resolveDirectoryEntry,
   resolveFileEntry,
@@ -104,9 +108,7 @@ describe('setDropEffect', () => {
       },
     });
 
-    expect(() =>
-      setDropEffect({ dataTransfer } as unknown as DragEvent, 'move'),
-    ).not.toThrow();
+    expect(() => setDropEffect({ dataTransfer } as unknown as DragEvent, 'move')).not.toThrow();
     expect(console.warn).toHaveBeenCalled();
   });
 });
@@ -369,6 +371,64 @@ describe('readDroppedFiles', () => {
 
     await expect(readDroppedFiles(dt, true)).rejects.toThrow();
   });
+
+  it('survives a handle that resolves to undefined rather than null', async () => {
+    // A synthetic DataTransfer (a test, an automation harness) and a revoked
+    // permission both produce this. It used to reach `handle.kind`, throw,
+    // and take the whole drop down with it.
+    const item = fileItem({ getAsFileSystemHandle: async () => undefined });
+    const dt = { items: [item], files: [makeFile('real.txt')] } as unknown as DataTransfer;
+
+    const result = await readDroppedFiles(dt, true);
+
+    expect(result.map((f) => f.relativePath)).toEqual(['real.txt']);
+  });
+
+  it('falls back to the FileList when the handle path yields nothing', async () => {
+    const item = fileItem({
+      getAsFileSystemHandle: async () => {
+        throw new Error('permission denied');
+      },
+    });
+    const dt = { items: [item], files: [makeFile('kept.pdf')] } as unknown as DataTransfer;
+
+    const result = await readDroppedFiles(dt, true);
+
+    expect(result.map((f) => f.relativePath)).toEqual(['kept.pdf']);
+  });
+
+  it('falls back to the FileList when the legacy entry path yields nothing', async () => {
+    const item = fileItem({ webkitGetAsEntry: () => null });
+    const dt = { items: [item], files: [makeFile('kept.txt')] } as unknown as DataTransfer;
+
+    const result = await readDroppedFiles(dt, true);
+
+    expect(result.map((f) => f.relativePath)).toEqual(['kept.txt']);
+  });
+
+  it('still returns nothing when the folder API is empty and so is the FileList', async () => {
+    const item = fileItem({ getAsFileSystemHandle: async () => null });
+    const dt = { items: [item], files: [] } as unknown as DataTransfer;
+
+    expect(await readDroppedFiles(dt, true)).toEqual([]);
+  });
+
+  it('prefers the folder-aware read over the FileList when it finds anything', async () => {
+    // The FileList cannot describe folders, so it must never win a race it
+    // did not need to enter.
+    const nested = makeFile('report.pdf');
+    const handle = {
+      kind: 'file',
+      name: 'report.pdf',
+      getFile: async () => nested,
+    };
+    const item = fileItem({ getAsFileSystemHandle: async () => handle });
+    const dt = { items: [item], files: [makeFile('report.pdf')] } as unknown as DataTransfer;
+
+    const result = await readDroppedFiles(dt, true);
+
+    expect(result).toEqual([{ file: nested, relativePath: 'report.pdf' }]);
+  });
 });
 
 // ─── walkHandles ────────────────────────────────────────────────────────────
@@ -521,15 +581,88 @@ describe('walkEntries', () => {
   it('flattens results across multiple entries', async () => {
     const f1 = makeFile('a.txt');
     const f2 = makeFile('b.txt');
-    const result = await walkEntries(
-      [fileEntry('a.txt', f1), fileEntry('b.txt', f2)],
-      '',
-      true,
-    );
+    const result = await walkEntries([fileEntry('a.txt', f1), fileEntry('b.txt', f2)], '', true);
     expect(result.map((f) => f.relativePath)).toEqual(['a.txt', 'b.txt']);
   });
 
   it('returns an empty array for no entries', async () => {
     expect(await walkEntries([], '', true)).toEqual([]);
+  });
+});
+
+// ─── Claiming ───────────────────────────────────────────────────────────────
+
+describe('claimDragEvent / isDragEventClaimed', () => {
+  it('reports an untouched event as unclaimed', () => {
+    expect(isDragEventClaimed(new Event('drop'))).toBe(false);
+  });
+
+  it('reports an event as claimed once it is marked', () => {
+    const event = new Event('drop');
+    claimDragEvent(event);
+    expect(isDragEventClaimed(event)).toBe(true);
+  });
+
+  it('marks without preventing the default — that is the whole point', () => {
+    const event = new Event('drop', { cancelable: true });
+    claimDragEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('still treats preventDefault as a claim, so existing handlers keep working', () => {
+    const event = new Event('drop', { cancelable: true });
+    event.preventDefault();
+    expect(isDragEventClaimed(event)).toBe(true);
+  });
+
+  it('keeps claims separate per event', () => {
+    const claimedEvent = new Event('drop');
+    const otherEvent = new Event('drop');
+    claimDragEvent(claimedEvent);
+    expect(isDragEventClaimed(otherEvent)).toBe(false);
+  });
+});
+
+// ─── isNearestDropZone ──────────────────────────────────────────────────────
+
+describe('isNearestDropZone', () => {
+  /** outer[data-drop-zone] > middle > inner[data-drop-zone] > leaf */
+  function tree() {
+    const outer = document.createElement('div');
+    outer.setAttribute(DROP_ZONE_ATTRIBUTE, '');
+    const middle = outer.appendChild(document.createElement('div'));
+    const inner = middle.appendChild(document.createElement('div'));
+    inner.setAttribute(DROP_ZONE_ATTRIBUTE, '');
+    const leaf = inner.appendChild(document.createElement('span'));
+    return { outer, middle, inner, leaf };
+  }
+
+  /** An event whose target is `el`, without needing a live dispatch. */
+  function eventOn(el: Element): Event {
+    const event = new Event('drop');
+    Object.defineProperty(event, 'target', { value: el });
+    return event;
+  }
+
+  it('is true for the zone the drag actually landed on', () => {
+    const { outer, middle } = tree();
+    expect(isNearestDropZone(eventOn(outer), outer)).toBe(true);
+    expect(isNearestDropZone(eventOn(middle), outer)).toBe(true);
+  });
+
+  it('is false for an outer zone when the drag landed inside a nested one', () => {
+    const { outer, inner, leaf } = tree();
+    expect(isNearestDropZone(eventOn(inner), outer)).toBe(false);
+    expect(isNearestDropZone(eventOn(leaf), outer)).toBe(false);
+  });
+
+  it('is true for the nested zone itself', () => {
+    const { inner, leaf } = tree();
+    expect(isNearestDropZone(eventOn(leaf), inner)).toBe(true);
+  });
+
+  it('allows an event with no element target — the document listeners check their own', () => {
+    const { outer } = tree();
+    expect(isNearestDropZone(new Event('drop'), outer)).toBe(true);
   });
 });

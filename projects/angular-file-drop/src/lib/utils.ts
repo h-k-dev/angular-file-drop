@@ -22,6 +22,75 @@ export function setDropEffect(event: DragEvent, dropEffect: DataTransfer['dropEf
   }
 }
 
+// ─── Claiming ───────────────────────────────────────────────────────────────
+
+/**
+ * Drag events that some handler has taken responsibility for.
+ *
+ * A `WeakSet` rather than a property on the event: it adds nothing to an
+ * object the browser owns, and it disappears with the event.
+ */
+const claimed = new WeakSet<Event>();
+
+/**
+ * Marks a drag event as handled, so that dropzones further up the tree leave
+ * it alone.
+ *
+ * `preventDefault()` is the conventional signal and this directive still
+ * honours it — but it is a *shared* one. A rich-text editor, a canvas, a
+ * sortable list: all of them call `preventDefault` on drags for reasons of
+ * their own, and a handler that wants the browser's default behaviour has no
+ * way to claim a drop at all. This is the unambiguous version: it means
+ * "I am handling this drop", and nothing else.
+ *
+ * Call it from any nested handler — it does not have to be a dropzone:
+ *
+ * ```ts
+ * // A ProseMirror plugin that embeds dropped images inline, and wants the
+ * // page's attachment dropzone to stay out of it.
+ * handleDrop(view, event) {
+ *   if (!isImageDrop(event)) return false;
+ *   claimDragEvent(event);
+ *   insertImages(view, event.dataTransfer.files);
+ *   return true;
+ * }
+ * ```
+ */
+export function claimDragEvent(event: Event): void {
+  claimed.add(event);
+}
+
+/**
+ * Whether {@link claimDragEvent} has been called for this event, or something
+ * called `preventDefault()` on it — the two ways a nested handler can say it
+ * has taken the drop.
+ */
+export function isDragEventClaimed(event: Event): boolean {
+  return claimed.has(event) || event.defaultPrevented;
+}
+
+/**
+ * The attribute every dropzone host carries, so zones can recognise one
+ * another in the DOM without depending on how the selector was written in a
+ * template. Used by the `selfOnly` input.
+ */
+export const DROP_ZONE_ATTRIBUTE = 'data-drop-zone';
+
+/**
+ * Whether the event landed on `host` itself rather than inside a dropzone
+ * nested within it. Structural, so it holds regardless of whether the inner
+ * zone claimed the event, was disabled, or filtered every file out.
+ */
+export function isNearestDropZone(event: Event, host: HTMLElement): boolean {
+  const target = event.target;
+  if (!(target instanceof Element)) return true;
+  const nearest = target.closest(`[${DROP_ZONE_ATTRIBUTE}]`);
+  // A target outside the host entirely is not this zone's business either;
+  // that only happens for the document-level listeners, which do their own
+  // checks.
+  return nearest === null || nearest === host;
+}
+
 // ─── Filtering ──────────────────────────────────────────────────────────────
 
 /**
@@ -117,26 +186,52 @@ export async function readDroppedFiles(
             }
           }),
         )
-      ).filter((h): h is FileSystemHandle => h !== null);
+      )
+        // `!= null`, not `!== null`: an item that resolves to `undefined` — a
+        // synthetic DataTransfer, a permission the user never granted — used
+        // to survive this filter and blow up on `handle.kind` downstream.
+        .filter((h): h is FileSystemHandle => h != null);
 
-      return await walkHandles(handles, '', traverseDirectories);
+      return withFileListFallback(await walkHandles(handles, '', traverseDirectories), dt);
     }
 
     // Fallback 1: The old webkit API (still supports folders)
     if (items.length && 'webkitGetAsEntry' in items[0]) {
       const entries = items
         .map((item) => item.webkitGetAsEntry())
-        .filter((entry): entry is FileSystemEntry => entry !== null);
+        .filter((entry): entry is FileSystemEntry => entry != null);
 
-      return await walkEntries(entries, '', traverseDirectories);
+      return withFileListFallback(await walkEntries(entries, '', traverseDirectories), dt);
     }
 
     // Fallback 2: Basic FileList (no folder traversal support)
     return toDroppedFiles(dt.files);
   } catch (error) {
     console.error('[FileDnd] Error reading dropped files:', error);
-    return [];
+    // Even a thrown read must not lose a drop the browser already handed us
+    // in full: `dt.files` is always there, it just cannot describe folders.
+    return toDroppedFiles(dt.files ?? []);
   }
+}
+
+/**
+ * The entry/handle APIs are the only ones that can describe folders, so they
+ * are tried first — but they are also the ones that can come back empty for
+ * reasons that have nothing to do with the drop (a revoked permission, a
+ * DataTransfer synthesized by a test or an automation harness). When they
+ * yield nothing and the plain `FileList` is not empty, the FileList is the
+ * better answer: fewer paths, but real files rather than none.
+ */
+function withFileListFallback(read: DroppedFile[], dt: DataTransfer): DroppedFile[] {
+  if (read.length) return read;
+  const fallback = toDroppedFiles(dt.files ?? []);
+  if (fallback.length) {
+    console.warn(
+      '[FileDnd] Directory-aware read returned nothing; falling back to DataTransfer.files ' +
+        '(folder structure is not available for this drop).',
+    );
+  }
+  return fallback;
 }
 
 // ─── Modern FileSystemHandle Traversal ──────────────────────────────────────
@@ -172,8 +267,11 @@ export async function walkHandles(
         results.push(...childResults);
       }
     } catch (err) {
-      // Hardened: if one file is locked or requires permissions the user denied, just skip it
-      console.warn(`[FileDnd] Skipped handle ${handle.name} due to error:`, err);
+      // Hardened: if one file is locked or requires permissions the user denied, just skip it.
+      // `describe` rather than `handle.name`: the handle is exactly the thing
+      // that just misbehaved, and reading a property off it here would throw
+      // *inside the catch* — turning one skipped file into a failed drop.
+      console.warn(`[FileDnd] Skipped handle ${describe(handle)} due to error:`, err);
     }
   }
 
@@ -211,9 +309,23 @@ export async function walkEntry(
       );
     }
   } catch (err) {
-    console.warn(`[FileDnd] Skipped entry ${entry.name} due to error:`, err);
+    // See the note in `walkHandles`: never dereference the failed object here.
+    console.warn(`[FileDnd] Skipped entry ${describe(entry)} due to error:`, err);
   }
   return [];
+}
+
+/**
+ * A name for a handle or entry that is safe to read while handling its own
+ * failure — the object may be null, undefined, or a proxy that throws on
+ * property access.
+ */
+function describe(target: { name?: string } | null | undefined): string {
+  try {
+    return target?.name ?? '<unknown>';
+  } catch {
+    return '<unreadable>';
+  }
 }
 
 export function resolveFileEntry(
