@@ -16,13 +16,22 @@
   [multiple]="false"
   [clickable]="false"
   [acceptedFiles]="documentTypes"
+  [preventDocumentDrop]="preventMiss()"
   [class.app-shell--drag-over]="appZone.isDragOver()"
   (fileDrop)="onDocumentDrop($event)"
+  (dropMissed)="onMissedDrop($event)"
 >
   <mat-toolbar>
+    <!-- Filled means on. It sits inside zone 3, which is harmless: zone 3 is
+         `[clickable]="false"`, so no click of any kind opens its picker. -->
     <div class="toolbar__actions">
-      <button matButton="outlined" (click)="zone1Uploads.set([])">clear 1</button>
-      <button matButton="outlined" (click)="zone2Uploads.set([])">clear 2</button>
+      <button
+        [matButton]="preventMiss() ? 'filled' : 'outlined'"
+        [attr.aria-pressed]="preventMiss()"
+        (click)="preventMiss.set(!preventMiss())"
+      >
+        Prevent miss
+      </button>
     </div>
 
     <!-- The middle of the bar belongs to zone 3: the hint while a document is
@@ -66,13 +75,30 @@
       id="dropzone-1"
       dropZone
       #zone1="dropZone"
+      [disabled]="zone1Disabled()"
       [class.drag-over]="zone1.isDragOver()"
+      [class.dropzone--disabled]="zone1Disabled()"
       (fileDrop)="onZone1Upload($event)"
     >
+      <!-- The zone's own switch, in its corner. Clicking it cannot open the
+           picker: the directive ignores activation landing on a nested
+           button, which is what makes controls inside a clickable zone
+           possible at all. -->
+      <button
+        mat-icon-button
+        class="zone-toggle"
+        [attr.aria-pressed]="zone1Disabled()"
+        [title]="zone1Disabled() ? 'Enable this zone' : 'Disable this zone'"
+        [attr.aria-label]="zone1Disabled() ? 'Enable zone 1' : 'Disable zone 1'"
+        (click)="zone1Disabled.set(!zone1Disabled())"
+      >
+        <mat-icon>{{ zone1Disabled() ? 'block' : 'check_circle' }}</mat-icon>
+      </button>
+
       @if (zone1.isDragOver()) {
         <app-dropzone-hint-1></app-dropzone-hint-1>
       } @else {
-        <p>Drop files or Click on Me to Upload</p>
+        <p>{{ zone1Disabled() ? 'Zone disabled' : 'Drop files or Click on Me to Upload' }}</p>
 
         @if (zone1Uploads().length > 0) {
           <mat-list class="file-list">
@@ -86,6 +112,12 @@
               </mat-list-item>
             }
           </mat-list>
+
+          <!-- Clicking this does not open the file picker: the directive
+               ignores activation that lands on a nested button. -->
+          <button matButton="outlined" class="zone-clear" (click)="zone1Uploads.set([])">
+            Clear
+          </button>
         }
       }
     </div>
@@ -95,14 +127,27 @@
       id="dropzone-2"
       dropZone
       #zone2="dropZone"
+      [disabled]="zone2Disabled()"
       [class.drag-over]="zone2.isDragOver()"
+      [class.dropzone--disabled]="zone2Disabled()"
       (fileDrop)="onZone2Upload($event)"
       isManualActivation
     >
+      <button
+        mat-icon-button
+        class="zone-toggle"
+        [attr.aria-pressed]="zone2Disabled()"
+        [title]="zone2Disabled() ? 'Enable this zone' : 'Disable this zone'"
+        [attr.aria-label]="zone2Disabled() ? 'Enable zone 2' : 'Disable zone 2'"
+        (click)="zone2Disabled.set(!zone2Disabled())"
+      >
+        <mat-icon>{{ zone2Disabled() ? 'block' : 'check_circle' }}</mat-icon>
+      </button>
+
       @if (zone2.isDragOver()) {
         <app-dropzone-hint-2></app-dropzone-hint-2>
       } @else {
-        <p>Drop files (Manual Activation)</p>
+        <p>{{ zone2Disabled() ? 'Zone disabled' : 'Drop files (Manual Activation)' }}</p>
 
         @if (zone2Uploads().length > 0) {
           <mat-list class="file-list">
@@ -116,8 +161,21 @@
               </mat-list-item>
             }
           </mat-list>
+
+          <button matButton="outlined" class="zone-clear" (click)="zone2Uploads.set([])">
+            Clear
+          </button>
         }
       }
     </div>
   </main>
 </div>
+
+<!-- Deliberately a sibling of zone 3 rather than a child of it. Zone 3 covers
+     the viewport exactly, so without this strip there is nowhere on the page a
+     dragged file can land unclaimed — and `preventDocumentDrop` only ever acts
+     on drags nobody wanted. This is that nowhere. -->
+<footer class="page-footer" [class.page-footer--armed]="preventMiss()">
+  <mat-icon class="page-footer__icon">{{ preventMiss() ? 'shield' : 'warning' }}</mat-icon>
+  <span>{{ footerHint() }}</span>
+</footer>

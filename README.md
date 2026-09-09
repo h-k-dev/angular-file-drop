@@ -28,6 +28,7 @@ Dropzone.js is great, but it often fights against modern Angular architecture by
 - Single- or multiple-file enforcement
 - Automatic hidden-file filtering (`.git`, `.DS_Store`, …)
 - Signal-based drag-over state for easy template styling
+- Optional `preventDocumentDrop`, so a missed drop no longer navigates the browser away from your app
 - SSR-safe (guards all browser-only APIs)
 - A ready-made `FILE_TYPES` map of common `accept` strings
 
@@ -142,6 +143,63 @@ The `isDragOver` signal flips while a valid file drag is over the element. Grab 
 </div>
 ```
 
+### Stop a stray drop navigating away
+
+Miss the zone by a few pixels and the browser's own default takes over: it
+opens the dropped file as if it were a link, and whatever the user had unsaved
+on the page is gone. `preventDocumentDrop` turns that default off.
+
+```html
+<div dropZone preventDocumentDrop (fileDrop)="onDrop($event)">Drop files here</div>
+```
+
+The effect is document-wide, because the drops it catches are by definition
+the ones that landed nowhere near this element — so set it on the zone that
+owns the page, not on each of several zones. It is **off by default**: a
+directive on one widget should not quietly change how the rest of the
+application behaves.
+
+Drags that a dropzone or any other handler has taken are untouched; only the
+ones nobody wanted are cancelled. Drags of text or in-page items are left
+alone entirely.
+
+Swallowing a drop silently is its own kind of broken — the file just vanishes,
+which from the user's side looks exactly like a failed upload. `dropMissed`
+fires when one is caught, so you can say what happened:
+
+```ts
+@Component({
+  template: `
+    <div dropZone preventDocumentDrop (dropMissed)="onMissed($event)" (fileDrop)="onDrop($event)">
+      Drop files here
+    </div>
+  `,
+})
+export class Component {
+  #snackBar = inject(MatSnackBar);
+
+  onMissed(event: DragEvent) {
+    const files = event.dataTransfer?.files;
+    const what = files?.length === 1 ? files[0].name : `${files?.length ?? 0} files`;
+    this.#snackBar.open(`${what} landed on no dropzone.`, 'Got it', { duration: 4000 });
+  }
+}
+```
+
+It fires only for genuine misses, so it is never a duplicate of `fileDrop`.
+The drop is already cancelled by the time you see it; the `DragEvent` is
+passed through so you can name what was missed. It carries no read files —
+walking folders for something that was thrown away would be work spent on a
+list nobody asked for.
+
+> **Why the cursor still says "copy" over dead ground.** A `dropEffect` of
+> `none` would be the honest cursor, and it stops the navigation just as well
+> — but under the HTML drag-and-drop model a drag operation of `none` is
+> cancelled outright: the browser fires `dragleave` instead of `drop`. The
+> file would disappear without a word and `dropMissed` would never arrive.
+> Telling the user what happened is worth more than a cursor that tells them
+> a moment earlier.
+
 ### Manual activation (custom button)
 
 Disable the built-in click handling with `isManualActivation` and open the picker yourself from a child control.
@@ -242,26 +300,28 @@ onDrop(event: FileDropEvent) {
 
 ### Inputs
 
-| Input                | Type      | Default | Description                                                                                                      |
-| -------------------- | --------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| `multiple`           | `boolean` | `true`  | Allow more than one file. When `false`, only the first file is emitted.                                          |
-| `directory`          | `boolean` | `true`  | Recursively traverse dropped folders.                                                                            |
-| `directoryPicker`    | `boolean` | `false` | Make the click-to-open dialog a **folder** picker (`webkitdirectory`) rather than files.                         |
-| `acceptedFiles`      | `string`  | `''`    | `accept`-style filter, e.g. `.png,image/*,application/pdf`. Empty accepts everything.                            |
-| `ignoreHiddenFiles`  | `boolean` | `true`  | Drop dotfiles and files inside dot-folders (`.git`, `.DS_Store`, …).                                             |
-| `clickable`          | `boolean` | `true`  | Open the file picker when the host element is clicked or activated via keyboard.                                 |
-| `disabled`           | `boolean` | `false` | Ignore all drops, clicks, and keyboard activation.                                                               |
-| `isManualActivation` | `boolean` | `false` | Disable built-in click/keyboard activation so you can call the `open*` methods yourself.                         |
-| `selfOnly`           | `boolean` | `false` | Ignore drags that land inside a **nested** dropzone, rather than on this one. See [Nested zones](#nested-zones). |
+| Input                 | Type      | Default | Description                                                                                                      |
+| --------------------- | --------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `multiple`            | `boolean` | `true`  | Allow more than one file. When `false`, only the first file is emitted.                                          |
+| `directory`           | `boolean` | `true`  | Recursively traverse dropped folders.                                                                            |
+| `directoryPicker`     | `boolean` | `false` | Make the click-to-open dialog a **folder** picker (`webkitdirectory`) rather than files.                         |
+| `acceptedFiles`       | `string`  | `''`    | `accept`-style filter, e.g. `.png,image/*,application/pdf`. Empty accepts everything.                            |
+| `ignoreHiddenFiles`   | `boolean` | `true`  | Drop dotfiles and files inside dot-folders (`.git`, `.DS_Store`, …).                                             |
+| `clickable`           | `boolean` | `true`  | Open the file picker when the host element is clicked or activated via keyboard.                                 |
+| `disabled`            | `boolean` | `false` | Ignore all drops, clicks, and keyboard activation.                                                               |
+| `isManualActivation`  | `boolean` | `false` | Disable built-in click/keyboard activation so you can call the `open*` methods yourself.                         |
+| `selfOnly`            | `boolean` | `false` | Ignore drags that land inside a **nested** dropzone, rather than on this one. See [Nested zones](#nested-zones). |
+| `preventDocumentDrop` | `boolean` | `false` | Stop the browser navigating away when a file is dropped on the page but outside every zone. Document-wide.       |
 
 ### Outputs
 
-| Output      | Payload         | Description                                             |
-| ----------- | --------------- | ------------------------------------------------------- |
-| `fileDrop`  | `FileDropEvent` | Emitted after files are dropped or chosen and filtered. |
-| `dragEnter` | `DragEvent`     | A valid file drag entered the element.                  |
-| `dragOver`  | `DragEvent`     | A valid file drag is moving over the element.           |
-| `dragLeave` | `DragEvent`     | A valid file drag left the element.                     |
+| Output       | Payload         | Description                                                                       |
+| ------------ | --------------- | --------------------------------------------------------------------------------- |
+| `fileDrop`   | `FileDropEvent` | Emitted after files are dropped or chosen and filtered.                           |
+| `dragEnter`  | `DragEvent`     | A valid file drag entered the element.                                            |
+| `dragOver`   | `DragEvent`     | A valid file drag is moving over the element.                                     |
+| `dragLeave`  | `DragEvent`     | A valid file drag left the element.                                               |
+| `dropMissed` | `DragEvent`     | A file landed on the page but on no zone, and `preventDocumentDrop` swallowed it. |
 
 ### Public members
 

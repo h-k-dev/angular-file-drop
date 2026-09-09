@@ -59,6 +59,42 @@ function fileDrag(type: 'dragenter' | 'dragover' | 'drop', name = 'a.txt'): Drag
   return event;
 }
 
+/** A drag of something that is not a file — text, a link, an in-page item. */
+function textDrag(type: 'dragover' | 'drop'): DragEvent {
+  const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
+  Object.defineProperty(event, 'dataTransfer', {
+    value: { types: ['text/plain'], items: [], files: [], effectAllowed: 'copy' },
+  });
+  return event;
+}
+
+/**
+ * A zone alongside ground that is not a zone — `.outside` is where a drop
+ * that missed lands, which is the only place `preventDocumentDrop` shows up.
+ */
+@Component({
+  imports: [AngularFileDrop],
+  template: `
+    @if (present()) {
+      <div
+        class="zone"
+        dropZone
+        [clickable]="false"
+        [preventDocumentDrop]="prevent()"
+        (fileDrop)="drops.push($event)"
+        (dropMissed)="missed.push($event)"
+      ></div>
+    }
+    <div class="outside"></div>
+  `,
+})
+class PreventHost {
+  readonly prevent = signal(false);
+  readonly present = signal(true);
+  readonly missed: DragEvent[] = [];
+  readonly drops: FileDropEvent[] = [];
+}
+
 /** Drops settle after an await: `onDrop` reads the DataTransfer async. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -315,6 +351,196 @@ describe('AngularFileDrop', () => {
       );
 
       expect(outer.isDragOver()).toBe(true);
+    });
+  });
+
+  describe('preventDocumentDrop', () => {
+    function setup(prevent: boolean) {
+      const fixture = TestBed.createComponent(PreventHost);
+      fixture.componentInstance.prevent.set(prevent);
+      fixture.detectChanges();
+
+      const query = (selector: string) =>
+        fixture.nativeElement.querySelector(selector) as HTMLElement;
+
+      return {
+        fixture,
+        host: fixture.componentInstance,
+        zone: query('.zone'),
+        outside: query('.outside'),
+      };
+    }
+
+    it('lets a stray drop navigate when it is off', () => {
+      const { outside } = setup(false);
+
+      const over = fileDrag('dragover');
+      outside.dispatchEvent(over);
+
+      expect(over.defaultPrevented).toBe(false);
+    });
+
+    it('cancels a drag that missed every zone', () => {
+      const { outside } = setup(true);
+
+      const over = fileDrag('dragover');
+      const drop = fileDrag('drop');
+      outside.dispatchEvent(over);
+      outside.dispatchEvent(drop);
+
+      // Both halves matter: without cancelling the dragover the browser
+      // never fires a cancellable drop, it just navigates.
+      expect(over.defaultPrevented).toBe(true);
+      expect(drop.defaultPrevented).toBe(true);
+    });
+
+    it('leaves the drop effect real, so the browser still delivers the drop', () => {
+      const { outside } = setup(true);
+
+      const over = fileDrag('dragover');
+      outside.dispatchEvent(over);
+
+      // `'none'` would be the honest cursor — "not here", said while the
+      // drag is still in flight — and it stops the navigation just as well.
+      // But under the HTML drag-and-drop model a drag operation of `none` is
+      // cancelled outright: the browser fires `dragleave` instead of `drop`.
+      // The file would vanish in silence and `dropMissed` would never
+      // arrive. Pinned here because every synthetic test still passes when
+      // this is wrong — a hand-dispatched `drop` bypasses the very decision
+      // this is about.
+      expect(over.defaultPrevented).toBe(true);
+      expect(over.dataTransfer!.dropEffect).not.toBe('none');
+    });
+
+    it('leaves a drag over the zone itself alone', () => {
+      const { zone } = setup(true);
+
+      const over = fileDrag('dragover');
+      zone.dispatchEvent(over);
+
+      // Cancelled by the zone accepting the drag, and the document handler
+      // stands down rather than touching it a second time.
+      expect(over.defaultPrevented).toBe(true);
+      expect(over.dataTransfer!.dropEffect).toBe('copy');
+    });
+
+    it('leaves a drag another handler claimed alone', () => {
+      const { outside } = setup(true);
+
+      // Claimed off in the corner of the page by something that is not a
+      // dropzone — an editor, a canvas. Not ours to cancel: claiming does
+      // not prevent the default, so an untouched event still reads as
+      // uncancelled here.
+      const over = fileDrag('dragover');
+      claimDragEvent(over);
+      outside.dispatchEvent(over);
+
+      expect(over.defaultPrevented).toBe(false);
+    });
+
+    it('ignores drags that carry no files', () => {
+      const { outside } = setup(true);
+
+      // Dragging text or an in-page item is somebody else's business, and
+      // cancelling it would break their drop.
+      const over = textDrag('dragover');
+      outside.dispatchEvent(over);
+
+      expect(over.defaultPrevented).toBe(false);
+    });
+
+    it('still resets the highlight on a drop it does not cancel', () => {
+      const { fixture, zone, outside } = setup(false);
+      const directive = fixture.debugElement.query(By.css('.zone')).injector.get(AngularFileDrop);
+
+      zone.dispatchEvent(fileDrag('dragenter'));
+      expect(directive.isDragOver()).toBe(true);
+
+      // The document reset predates this input and must survive it.
+      outside.dispatchEvent(fileDrag('drop'));
+
+      expect(directive.isDragOver()).toBe(false);
+    });
+
+    it('stops preventing when the input is unset', () => {
+      const { fixture, host, outside } = setup(true);
+      host.prevent.set(false);
+      fixture.detectChanges();
+
+      const over = fileDrag('dragover');
+      outside.dispatchEvent(over);
+
+      expect(over.defaultPrevented).toBe(false);
+    });
+
+    it('stops preventing when the zone is destroyed', () => {
+      const { fixture, host, outside } = setup(true);
+
+      host.present.set(false);
+      fixture.detectChanges();
+
+      const over = fileDrag('dragover');
+      outside.dispatchEvent(over);
+
+      expect(over.defaultPrevented).toBe(false);
+    });
+
+    describe('dropMissed', () => {
+      it('reports the drop it swallowed', () => {
+        const { host, outside } = setup(true);
+
+        const drop = fileDrag('drop');
+        outside.dispatchEvent(drop);
+
+        // Prevention is otherwise silent: from the user's side a swallowed
+        // file is indistinguishable from a broken upload.
+        expect(host.missed).toEqual([drop]);
+        // Passed through with its payload intact, so the handler can say
+        // *what* was missed.
+        expect([...(host.missed[0].dataTransfer!.files as any)].map((f: File) => f.name)).toEqual([
+          'a.txt',
+        ]);
+      });
+
+      it('stays quiet when the input is off', () => {
+        const { host, outside } = setup(false);
+
+        // Nothing was prevented, so nothing was missed — the browser is
+        // navigating away and there is no page left to tell.
+        outside.dispatchEvent(fileDrag('drop'));
+
+        expect(host.missed).toHaveLength(0);
+      });
+
+      it('does not fire for a drop the zone itself took', async () => {
+        const { host, zone } = setup(true);
+
+        zone.dispatchEvent(fileDrag('drop'));
+        await settle();
+
+        // A miss and a hit are mutually exclusive; this is the pairing that
+        // would double-report if the two were not.
+        expect(host.drops).toHaveLength(1);
+        expect(host.missed).toHaveLength(0);
+      });
+
+      it('does not fire for a drag another handler claimed', () => {
+        const { host, outside } = setup(true);
+
+        const drop = fileDrag('drop');
+        claimDragEvent(drop);
+        outside.dispatchEvent(drop);
+
+        expect(host.missed).toHaveLength(0);
+      });
+
+      it('does not fire for a drag carrying no files', () => {
+        const { host, outside } = setup(true);
+
+        outside.dispatchEvent(textDrag('drop'));
+
+        expect(host.missed).toHaveLength(0);
+      });
     });
   });
 });

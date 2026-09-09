@@ -58,9 +58,14 @@ export type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.type
 
     // Global reset
     '(document:dragleave)': 'onDocumentDragLeave($event)',
-    '(document:drop)': 'resetDragState()',
+    '(document:drop)': 'onDocumentDrop($event)',
     '(document:dragend)': 'resetDragState()',
     '(window:blur)': 'resetDragState()',
+
+    // `preventDocumentDrop`. On the document because the drops it exists to
+    // catch are the ones that missed this element, and last in the bubble
+    // path because it has to know whether anything else wanted the drag.
+    '(document:dragover)': 'onDocumentDragOver($event)',
   },
 })
 export class AngularFileDrop {
@@ -106,6 +111,28 @@ export class AngularFileDrop {
    */
   selfOnly = input(false, { transform: booleanAttribute });
 
+  /**
+   * Stop the browser navigating away when a file is dropped on the page but
+   * outside every dropzone.
+   *
+   * Miss the zone by a few pixels and the browser's own default takes over:
+   * it opens the dropped file as if it were a link, and whatever the user
+   * had unsaved on the page is gone. This turns that default off.
+   *
+   * The effect is document-wide, because the drops it catches are by
+   * definition the ones that landed nowhere near this element — so set it on
+   * the zone that owns the page, not on each of several zones. Off by
+   * default: a directive on one widget should not quietly change how the
+   * rest of the application behaves.
+   *
+   * A drag that a dropzone or any other handler has taken — anything that
+   * called `claimDragEvent()` or `preventDefault()` — is left alone. Only
+   * drags nobody wanted are cancelled. Pair it with {@link dropMissed} to
+   * say so: a file that vanishes without a word looks, from the user's side,
+   * exactly like an upload that broke.
+   */
+  preventDocumentDrop = input(false, { transform: booleanAttribute });
+
   hostActivationEnabled = computed(() => this.clickable() && !this.isManualActivation());
   hostCanOpenPicker = computed(() => this.hostActivationEnabled() && !this.disabled());
 
@@ -113,6 +140,27 @@ export class AngularFileDrop {
   dragEnter = output<DragEvent>();
   dragLeave = output<DragEvent>();
   dragOver = output<DragEvent>();
+
+  /**
+   * A file was dropped on the page but on no dropzone at all, and
+   * `preventDocumentDrop` swallowed it rather than let the browser navigate.
+   *
+   * Without this, prevention is silent: the file simply vanishes, which from
+   * the user's side is indistinguishable from a drop that failed. Use it to
+   * say what happened — a toast, an inline notice, a nudge towards the zone.
+   *
+   * ```html
+   * <div dropZone preventDocumentDrop (dropMissed)="toast('Drop files on the box')">
+   * ```
+   *
+   * Fires only when the input is on and the drop was genuinely unclaimed, so
+   * it is a miss and never a duplicate of `fileDrop`. The event has already
+   * been cancelled; it is passed through so the handler can name what was
+   * missed via `event.dataTransfer`. It carries no read files: the drop was
+   * refused, and walking folders for something that was thrown away would be
+   * work done to produce a list nobody asked for.
+   */
+  dropMissed = output<DragEvent>();
 
   #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
@@ -248,6 +296,45 @@ export class AngularFileDrop {
   onDocumentDragLeave(event: DragEvent) {
     if (!containsFiles(event)) return; // Polish: ignore dragging text/links out of window
     if (!event.relatedTarget) this.resetDragState();
+  }
+
+  /**
+   * Whether a drag that has reached the document — past every element
+   * handler on the page — is one `preventDocumentDrop` should cancel.
+   *
+   * "Nobody wanted it" is the whole test. A drag some handler took is that
+   * handler's business, and a drag of text or an in-page item was never the
+   * browser-navigation hazard this input exists for.
+   */
+  shouldPreventDocumentDrop(event: DragEvent) {
+    if (!this.preventDocumentDrop()) return false;
+    return containsFiles(event) && !isDragEventClaimed(event);
+  }
+
+  /**
+   * Cancelling `dragover` is what makes the drop cancellable at all: leave
+   * the default in place and the browser never fires `drop` on the document,
+   * it simply navigates.
+   *
+   * The drop effect has to stay a real one. `'none'` would be the honest
+   * cursor — it says "not here" while the drag is still in flight, and it
+   * stops the navigation just as well — but under the HTML drag-and-drop
+   * model a drag operation of `none` is cancelled outright: the browser
+   * fires `dragleave` instead of `drop`. The page would swallow the file
+   * silently and {@link dropMissed} would never arrive. Telling the user
+   * what happened is worth more than a cursor that tells them early.
+   */
+  onDocumentDragOver(event: DragEvent) {
+    if (!this.shouldPreventDocumentDrop(event)) return;
+    event.preventDefault();
+    setDropEffect(event, 'copy');
+  }
+
+  onDocumentDrop(event: DragEvent) {
+    this.resetDragState();
+    if (!this.shouldPreventDocumentDrop(event)) return;
+    event.preventDefault();
+    this.dropMissed.emit(event);
   }
 
   resetDragState() {

@@ -54,6 +54,9 @@
   gap: 0.5rem;
   min-width: 0;
   max-width: 100%;
+  /* The pill's icon, size and close button do not shrink, so without this a
+     squeezed toolbar lets them spill over the buttons beside it. */
+  overflow: hidden;
   padding: 0.15rem 0.15rem 0.15rem 0.7rem;
 
   border: 1px solid var(--mat-sys-outline-variant);
@@ -101,6 +104,7 @@ main {
 
 // ─── Dropzone Shared Styles ──────────────────────────────────────────────────
 .dropzone {
+  position: relative; /* Anchors the zone's own on/off switch to its corner */
   flex: 1; /* This forces both zones to take up exactly 50% of the width */
   display: flex;
   flex-direction: column;
@@ -149,6 +153,24 @@ main {
   transform: scale(1.01); /* Slight pop effect */
 }
 
+// ─── Per-zone on/off switch ──────────────────────────────────────────────────
+/* Out of the centred column and into the corner, so it never shifts the
+   zone's own content. Above the drag highlight so it stays reachable. */
+.zone-toggle {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 1;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+/* A zone that takes nothing says so, but stays legible — its switch has to
+   remain readable enough to click again. */
+.dropzone--disabled {
+  opacity: 0.6;
+  border-style: dotted !important;
+}
+
 // ─── File List Styles ────────────────────────────────────────────────────────
 .file-list {
   width: 100%;
@@ -161,6 +183,49 @@ main {
   border: 1px solid var(--mat-sys-outline-variant);
 }
 
+// ─── The strip that is not a dropzone ────────────────────────────────────────
+/* Sits outside `.app-shell`, which is the whole point: zone 3 fills the
+   viewport, so this is the only ground a dragged file can land on without a
+   zone claiming it — the one place `preventDocumentDrop` has anything to do.
+   `flex: none` keeps it out of the height the shell above is dividing up. */
+.page-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface-variant);
+  font-size: var(--mat-sys-body-small-size);
+  text-align: center;
+  transition: background-color 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Armed: stray drops land here harmlessly rather than taking the page with
+   them. Loud enough to read as a state change, quiet enough to stay chrome. */
+.page-footer--armed {
+  background-color: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.page-footer__icon {
+  flex: none;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+/* Each zone clears itself, under its own list. The zone centres its children,
+   so the button only needs the gap. `flex: none` keeps it at its natural
+   height when the list above has grown to its scroll limit. */
+.zone-clear {
+  flex: none;
+  margin-top: 1rem;
+}
+
 @media (max-width: 1024px) {
   main {
     flex-direction: column; /* Stack zones vertically */
@@ -171,5 +236,36 @@ main {
     width: 100%; /* Allow them to span the full width */
     flex: none; /* Remove flex growth to respect height/content */
     min-height: 300px; /* Maintain a good drop target size when stacked */
+  }
+}
+
+// ─── Phones ──────────────────────────────────────────────────────────────────
+/* A phone-width bar cannot hold three controls and a filename side by side —
+   the buttons keep their width, so the document pill is squeezed to a sliver
+   and its contents run over them. Give the pill a line of its own instead:
+   `order` moves it after both button groups, `flex-basis: 100%` makes it wrap.
+   The row collapses to nothing when zone 3 is holding no document. */
+@media (max-width: 600px) {
+  mat-toolbar {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    row-gap: 0.25rem;
+    padding-block: 0.35rem;
+  }
+
+  .toolbar__centre {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  main {
+    padding: 1rem;
+    gap: 12px;
+  }
+
+  .page-footer {
+    padding: 0.6rem 0.9rem;
   }
 }
