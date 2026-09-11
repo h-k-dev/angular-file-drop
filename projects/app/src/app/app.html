@@ -96,7 +96,7 @@
       </button>
 
       @if (zone1.isDragOver()) {
-        <app-dropzone-hint-1></app-dropzone-hint-1>
+        <app-dropzone-hint-1 [types]="zone1.dragTypes()" />
       } @else {
         <p>{{ zone1Disabled() ? 'Zone disabled' : 'Drop files or Click on Me to Upload' }}</p>
 

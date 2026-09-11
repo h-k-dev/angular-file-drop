@@ -9,7 +9,7 @@
     "angular-file-drop": {
       "projectType": "library",
       "root": "projects/angular-file-drop",
-      "sourceRoot": "projects/angular-file-drop/src",
+      "sourceRoot": "projects/angular-file-drop",
       "prefix": "lib",
       "architect": {
         "build": {

@@ -13,11 +13,17 @@ import {
   signal,
 } from '@angular/core';
 
-import type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.types';
+// Across entry points, always by package name: a relative path here would
+// bundle `core` a second time into this entry — two claim registries, and a
+// claim made through one invisible to the other.
 import {
+  type DroppedFile,
+  type FileDropEvent,
+  type FilePickerOptions,
   claimDragEvent,
   containsFiles,
   createHiddenFileInput,
+  dragFileTypes,
   enforceMultiple,
   FILE_DND_IGNORE_SELECTOR,
   filterAcceptedFiles,
@@ -27,10 +33,14 @@ import {
   readDroppedFiles,
   setDropEffect,
   toDroppedFiles,
-} from './utils';
+} from '@h-k-dev/angular-file-drop/core';
 import { isPlatformBrowser } from '@angular/common';
 
-export type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.types';
+/** `dragTypes` is re-read on every `dragover` — every few pixels — and the
+    list does not change mid-drag, so an equal list must not count as a
+    change. */
+const sameTypes = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((type, i) => type === b[i]);
 
 @Directive({
   selector: '[dropZone]',
@@ -54,7 +64,10 @@ export type { DroppedFile, FileDropEvent, FilePickerOptions } from './files.type
     '[attr.role]': 'hostActivationEnabled() ? "button" : null',
     '[attr.tabindex]': 'hostActivationEnabled() ? (disabled() ? "-1" : "0") : null',
     '[attr.aria-disabled]': 'hostActivationEnabled() && disabled() ? "true" : null',
-    '[style.cursor]': 'hostCanOpenPicker() ? "pointer" : "auto"',
+    // Only where a click does something. `null` removes the inline style, so
+    // a host that cannot open a picker keeps whatever cursor its own
+    // stylesheet gives it — `text` on an editing surface, say.
+    '[style.cursor]': 'hostCanOpenPicker() ? "pointer" : null',
 
     // Global reset
     '(document:dragleave)': 'onDocumentDragLeave($event)',
@@ -125,8 +138,8 @@ export class AngularFileDrop {
    * default: a directive on one widget should not quietly change how the
    * rest of the application behaves.
    *
-   * A drag that a dropzone or any other handler has taken — anything that
-   * called `claimDragEvent()` or `preventDefault()` — is left alone. Only
+   * A drag some handler has taken (`claimDragEvent()`), or so much as
+   * accepted (`preventDefault()` on any of its events), is left alone. Only
    * drags nobody wanted are cancelled. Pair it with {@link dropMissed} to
    * say so: a file that vanishes without a word looks, from the user's side,
    * exactly like an upload that broke.
@@ -165,7 +178,22 @@ export class AngularFileDrop {
   #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   // ─── State ────────────────────────────────────────────────────────────────
+  /** `true` while a file drag this zone would take is over it. */
   isDragOver = signal(false);
+
+  /**
+   * The MIME types of the files in the drag over this zone — one entry per
+   * file, in the order the browser lists them — while {@link isDragOver} is
+   * true; empty otherwise.
+   *
+   * What a hint can be worded with before the drop: "Drop 3 images", "PDFs
+   * become attachments". As far as the browser tells during a drag, that is:
+   * names and contents are withheld until the drop, a type it does not know
+   * is `''`, and a browser that exposes no items at all leaves this empty —
+   * so treat the length as a count only when it is not 0, and never as a
+   * verdict on `acceptedFiles`, which can name extensions this cannot see.
+   */
+  dragTypes = signal<readonly string[]>([], { equal: sameTypes });
 
   el = inject<ElementRef<HTMLElement>>(ElementRef);
   hiddenInput?: HTMLInputElement;
@@ -237,6 +265,7 @@ export class AngularFileDrop {
     event.preventDefault();
     claimDragEvent(event);
     this.isDragOver.set(true);
+    this.dragTypes.set(dragFileTypes(event));
     this.dragEnter.emit(event);
   }
 
@@ -267,6 +296,7 @@ export class AngularFileDrop {
     }
 
     this.isDragOver.set(true);
+    this.dragTypes.set(dragFileTypes(event));
     this.dragOver.emit(event);
   }
 
@@ -287,7 +317,7 @@ export class AngularFileDrop {
     const related = event.relatedTarget;
 
     if (!(related instanceof Node) || !this.el.nativeElement.contains(related)) {
-      this.isDragOver.set(false);
+      this.resetDragState();
       this.dragLeave.emit(event);
     }
   }
@@ -308,7 +338,12 @@ export class AngularFileDrop {
    */
   shouldPreventDocumentDrop(event: DragEvent) {
     if (!this.preventDocumentDrop()) return false;
-    return containsFiles(event) && !isDragEventClaimed(event);
+    // Claimed, or merely accepted. `preventDefault` on a drag event is not a
+    // claim (see `isDragEventClaimed`), but it is somebody saying a drop may
+    // land here — and that somebody may have set a drop effect this must not
+    // overwrite. The drop itself is still cancelled if nobody takes it,
+    // whatever was said during the drag: that is exactly the hazard.
+    return containsFiles(event) && !isDragEventClaimed(event) && !event.defaultPrevented;
   }
 
   /**
@@ -339,6 +374,7 @@ export class AngularFileDrop {
 
   resetDragState() {
     this.isDragOver.set(false);
+    this.dragTypes.set([]);
   }
 
   async onDrop(event: DragEvent) {

@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DroppedFile } from './files.types';
+import { claimDragEvent, isDragEventClaimed } from './claim';
 import {
-  claimDragEvent,
   containsFiles,
   createHiddenFileInput,
   DROP_ZONE_ATTRIBUTE,
+  dragFileTypes,
   enforceMultiple,
   FILE_DND_IGNORE_SELECTOR,
   filterAcceptedFiles,
   filterHiddenFiles,
-  isDragEventClaimed,
   isFileAccepted,
   isHiddenPath,
   isNearestDropZone,
@@ -609,10 +609,22 @@ describe('claimDragEvent / isDragEventClaimed', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
-  it('still treats preventDefault as a claim, so existing handlers keep working', () => {
+  it('reads preventDefault on a drop as a claim — that is how a handler consumes one', () => {
     const event = new Event('drop', { cancelable: true });
     event.preventDefault();
     expect(isDragEventClaimed(event)).toBe(true);
+  });
+
+  it('does not read preventDefault during the drag as a claim', () => {
+    // On dragenter/dragover it is the spec's "a drop may land here" — every
+    // element that accepts drops says it, and it says nothing about who will
+    // take this one. Reading it as a claim put out the highlight of every
+    // zone wrapping an editor, over the very element the drop was headed for.
+    for (const type of ['dragenter', 'dragover']) {
+      const event = new Event(type, { cancelable: true });
+      event.preventDefault();
+      expect(isDragEventClaimed(event)).toBe(false);
+    }
   });
 
   it('keeps claims separate per event', () => {
@@ -620,6 +632,28 @@ describe('claimDragEvent / isDragEventClaimed', () => {
     const otherEvent = new Event('drop');
     claimDragEvent(claimedEvent);
     expect(isDragEventClaimed(otherEvent)).toBe(false);
+  });
+});
+
+// ─── dragFileTypes ──────────────────────────────────────────────────────────
+
+describe('dragFileTypes', () => {
+  const drag = (items: unknown[] | undefined) =>
+    ({ dataTransfer: items && { items } }) as unknown as DragEvent;
+
+  it('lists the type of every file item, in order, unknown ones as empty strings', () => {
+    const event = drag([
+      { kind: 'file', type: 'image/png' },
+      { kind: 'file', type: '' },
+      { kind: 'string', type: 'text/plain' },
+    ]);
+    expect(dragFileTypes(event)).toEqual(['image/png', '']);
+  });
+
+  it('is empty when the browser exposes no items', () => {
+    expect(dragFileTypes(drag([]))).toEqual([]);
+    expect(dragFileTypes(drag(undefined))).toEqual([]);
+    expect(dragFileTypes({ dataTransfer: null } as unknown as DragEvent)).toEqual([]);
   });
 });
 

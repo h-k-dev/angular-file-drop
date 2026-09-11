@@ -14,5 +14,11 @@
         <div class="magic-ripple"></div>
         <mat-icon class="hint-icon">cloud_upload</mat-icon>
     </div>
-    <span class="hint-text">Release to drop into Zone 1</span>
+    <span class="hint-text">
+        @if (count(); as n) {
+            Release to drop {{ n }} {{ n === 1 ? 'file' : 'files' }} into Zone 1
+        } @else {
+            Release to drop into Zone 1
+        }
+    </span>
 </div>

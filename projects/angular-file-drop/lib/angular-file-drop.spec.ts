@@ -3,8 +3,11 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { describe, expect, it } from 'vitest';
 import { AngularFileDrop } from './angular-file-drop';
-import { claimDragEvent, DROP_ZONE_ATTRIBUTE } from './utils';
-import type { FileDropEvent } from './files.types';
+import {
+  claimDragEvent,
+  DROP_ZONE_ATTRIBUTE,
+  type FileDropEvent,
+} from '@h-k-dev/angular-file-drop/core';
 
 @Component({
   imports: [AngularFileDrop],
@@ -48,13 +51,18 @@ class NestedHost {
   readonly innerDrops: FileDropEvent[] = [];
 }
 
-/** A drag event carrying one file, with `items` left empty so the read takes
-    the plain-FileList path (no File System Access API in the test env). */
-function fileDrag(type: 'dragenter' | 'dragover' | 'drop', name = 'a.txt'): DragEvent {
+/** A drag event carrying one file, with `items` left empty by default so the
+    read takes the plain-FileList path (no File System Access API in the test
+    env). Pass `items` only for drag-phase events, which never read. */
+function fileDrag(
+  type: 'dragenter' | 'dragover' | 'drop',
+  name = 'a.txt',
+  items: { kind: string; type: string }[] = [],
+): DragEvent {
   const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
   const files = [new File(['x'], name, { type: 'text/plain' })];
   Object.defineProperty(event, 'dataTransfer', {
-    value: { types: ['Files'], items: [], files, effectAllowed: 'copy', dropEffect: 'copy' },
+    value: { types: ['Files'], items, files, effectAllowed: 'copy', dropEffect: 'copy' },
   });
   return event;
 }
@@ -339,6 +347,28 @@ describe('AngularFileDrop', () => {
       expect(directive.isDragOver()).toBe(false);
     });
 
+    it('stays lit over a nested element that merely accepts the drag', () => {
+      // An editor answers every dragover with preventDefault — the spec's "a
+      // drop may land here" — without meaning to take this drop. That used
+      // to read as a claim and put the highlight out over the very element
+      // the file was headed for, while the drop still came here.
+      const fixture = TestBed.createComponent(HostComponent);
+      fixture.detectChanges();
+      const directive = fixture.debugElement
+        .query(By.directive(AngularFileDrop))
+        .injector.get(AngularFileDrop);
+      const host = fixture.nativeElement.querySelector('[dropZone]') as HTMLElement;
+
+      const enter = fileDrag('dragenter');
+      enter.preventDefault();
+      host.dispatchEvent(enter);
+      const over = fileDrag('dragover');
+      over.preventDefault();
+      host.dispatchEvent(over);
+
+      expect(directive.isDragOver()).toBe(true);
+    });
+
     it('selfOnly still highlights for a drag on the outer zone itself', () => {
       const fixture = TestBed.createComponent(NestedHost);
       fixture.componentInstance.selfOnly.set(true);
@@ -351,6 +381,83 @@ describe('AngularFileDrop', () => {
       );
 
       expect(outer.isDragOver()).toBe(true);
+    });
+  });
+
+  describe('dragTypes', () => {
+    const png = { kind: 'file', type: 'image/png' };
+    const pdf = { kind: 'file', type: 'application/pdf' };
+
+    function setup() {
+      const fixture = TestBed.createComponent(HostComponent);
+      fixture.detectChanges();
+      const directive = fixture.debugElement
+        .query(By.directive(AngularFileDrop))
+        .injector.get(AngularFileDrop);
+      const host = fixture.nativeElement.querySelector('[dropZone]') as HTMLElement;
+      return { directive, host };
+    }
+
+    it('names the files in flight while the drag is over the zone', () => {
+      const { directive, host } = setup();
+
+      host.dispatchEvent(fileDrag('dragenter', 'a.png', [png, pdf]));
+
+      expect(directive.dragTypes()).toEqual(['image/png', 'application/pdf']);
+    });
+
+    it('is empty again once the drag leaves', () => {
+      const { directive, host } = setup();
+      host.dispatchEvent(fileDrag('dragenter', 'a.png', [png]));
+
+      const leave = new Event('dragleave', { bubbles: true, cancelable: true }) as DragEvent;
+      Object.defineProperty(leave, 'dataTransfer', { value: { types: ['Files'] } });
+      Object.defineProperty(leave, 'relatedTarget', { value: document.body });
+      host.dispatchEvent(leave);
+
+      expect(directive.isDragOver()).toBe(false);
+      expect(directive.dragTypes()).toEqual([]);
+    });
+
+    it('is empty when the browser says nothing about the items', () => {
+      const { directive, host } = setup();
+
+      host.dispatchEvent(fileDrag('dragenter'));
+
+      expect(directive.isDragOver()).toBe(true);
+      expect(directive.dragTypes()).toEqual([]);
+    });
+
+    it('does not count an unchanged list as a change', () => {
+      const { directive, host } = setup();
+      host.dispatchEvent(fileDrag('dragenter', 'a.png', [png]));
+      const before = directive.dragTypes();
+
+      host.dispatchEvent(fileDrag('dragover', 'a.png', [png]));
+
+      // The same array back: `dragover` fires every few pixels, and a hint
+      // computed from this re-rendering on each would be churn for nothing.
+      expect(directive.dragTypes()).toBe(before);
+    });
+  });
+
+  describe('cursor', () => {
+    it('offers a pointer where a click opens the picker', () => {
+      const fixture = TestBed.createComponent(HostComponent);
+      fixture.detectChanges();
+      const host = fixture.nativeElement.querySelector('[dropZone]') as HTMLElement;
+
+      expect(host.style.cursor).toBe('pointer');
+    });
+
+    it('leaves the cursor to the host where a click does nothing', () => {
+      // An inline `auto` here used to override whatever the host's own
+      // stylesheet said — `cursor: text` on an editing surface, say.
+      const fixture = TestBed.createComponent(NestedHost);
+      fixture.detectChanges();
+      const outer = fixture.nativeElement.querySelector('.outer') as HTMLElement;
+
+      expect(outer.style.cursor).toBe('');
     });
   });
 
@@ -436,6 +543,20 @@ describe('AngularFileDrop', () => {
       outside.dispatchEvent(over);
 
       expect(over.defaultPrevented).toBe(false);
+    });
+
+    it('leaves a drag some element accepted alone, drop effect included', () => {
+      const { outside } = setup(true);
+
+      // An editor said "a drop may land here" and set its own cursor. Not a
+      // claim — but a drop will fire, so there is nothing to cancel, and the
+      // effect it chose is not ours to overwrite.
+      const over = fileDrag('dragover');
+      over.dataTransfer!.dropEffect = 'move';
+      over.preventDefault();
+      outside.dispatchEvent(over);
+
+      expect(over.dataTransfer!.dropEffect).toBe('move');
     });
 
     it('ignores drags that carry no files', () => {

@@ -4,7 +4,8 @@
   "compileOnSave": false,
   "compilerOptions": {
     "paths": {
-      "@h-k-dev/angular-file-drop": ["./dist/angular-file-drop"]
+      "@h-k-dev/angular-file-drop": ["./projects/angular-file-drop/public-api.ts"],
+      "@h-k-dev/angular-file-drop/core": ["./projects/angular-file-drop/core/public-api.ts"]
     },
     "strict": true,
     "noImplicitOverride": true,

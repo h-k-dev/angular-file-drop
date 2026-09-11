@@ -22,51 +22,18 @@ export function setDropEffect(event: DragEvent, dropEffect: DataTransfer['dropEf
   }
 }
 
-// ─── Claiming ───────────────────────────────────────────────────────────────
+// ─── Drag contents ─────────────────────────────────────────────────────────
 
 /**
- * Drag events that some handler has taken responsibility for.
- *
- * A `WeakSet` rather than a property on the event: it adds nothing to an
- * object the browser owns, and it disappears with the event.
+ * The MIME types of the files in a drag, as far as the browser tells during
+ * one — names and contents are withheld until the drop, and a type it does
+ * not know is `''`. Empty when it says nothing at all (some browsers expose
+ * no items until the drop), so the length is a count only when it is not 0.
  */
-const claimed = new WeakSet<Event>();
-
-/**
- * Marks a drag event as handled, so that dropzones further up the tree leave
- * it alone.
- *
- * `preventDefault()` is the conventional signal and this directive still
- * honours it — but it is a *shared* one. A rich-text editor, a canvas, a
- * sortable list: all of them call `preventDefault` on drags for reasons of
- * their own, and a handler that wants the browser's default behaviour has no
- * way to claim a drop at all. This is the unambiguous version: it means
- * "I am handling this drop", and nothing else.
- *
- * Call it from any nested handler — it does not have to be a dropzone:
- *
- * ```ts
- * // A ProseMirror plugin that embeds dropped images inline, and wants the
- * // page's attachment dropzone to stay out of it.
- * handleDrop(view, event) {
- *   if (!isImageDrop(event)) return false;
- *   claimDragEvent(event);
- *   insertImages(view, event.dataTransfer.files);
- *   return true;
- * }
- * ```
- */
-export function claimDragEvent(event: Event): void {
-  claimed.add(event);
-}
-
-/**
- * Whether {@link claimDragEvent} has been called for this event, or something
- * called `preventDefault()` on it — the two ways a nested handler can say it
- * has taken the drop.
- */
-export function isDragEventClaimed(event: Event): boolean {
-  return claimed.has(event) || event.defaultPrevented;
+export function dragFileTypes(event: DragEvent): string[] {
+  return Array.from(event.dataTransfer?.items ?? [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.type);
 }
 
 /**

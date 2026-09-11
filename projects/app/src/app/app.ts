@@ -18,11 +18,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 // AngularFileDrop
-import {
-  AngularFileDrop,
-  FileDropEvent,
-} from '../../../angular-file-drop/src/lib/angular-file-drop';
-import { FILE_TYPES } from '../../../angular-file-drop/src/lib/files.enum';
+import { AngularFileDrop, FILE_TYPES, FileDropEvent } from '@h-k-dev/angular-file-drop';
 
 // Components
 import { DropzoneHint1 } from './dropzone-hint-1/dropzone-hint-1';
