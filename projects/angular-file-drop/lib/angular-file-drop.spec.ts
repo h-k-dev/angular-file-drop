@@ -1,8 +1,8 @@
-import { Component, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { Component, Directive, signal } from '@angular/core';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { describe, expect, it } from 'vitest';
-import { AngularFileDrop } from './angular-file-drop';
+import { AngularFileDrop, DROP_ZONE_DEFAULTS } from './angular-file-drop';
 import {
   claimDragEvent,
   DROP_ZONE_ATTRIBUTE,
@@ -662,6 +662,101 @@ describe('AngularFileDrop', () => {
 
         expect(host.missed).toHaveLength(0);
       });
+    });
+  });
+
+  describe('filterAccepted', () => {
+    @Component({
+      imports: [AngularFileDrop],
+      template: `<div
+        dropZone
+        acceptedFiles=".pdf"
+        [filterAccepted]="filterAccepted()"
+        (fileDrop)="drops.push($event)"
+      ></div>`,
+    })
+    class FilterHost {
+      filterAccepted = signal(true);
+      drops: FileDropEvent[] = [];
+    }
+
+    it('drops a wrong file by default', async () => {
+      const fixture = TestBed.createComponent(FilterHost);
+      fixture.detectChanges();
+
+      fixture.nativeElement
+        .querySelector('[dropZone]')
+        .dispatchEvent(fileDrag('drop', 'notes.txt'));
+      await settle();
+
+      expect(fixture.componentInstance.drops).toHaveLength(0);
+    });
+
+    it('lets a wrong file through when off, for a consumer that says why', async () => {
+      const fixture = TestBed.createComponent(FilterHost);
+      fixture.componentInstance.filterAccepted.set(false);
+      fixture.detectChanges();
+
+      fixture.nativeElement
+        .querySelector('[dropZone]')
+        .dispatchEvent(fileDrag('drop', 'notes.txt'));
+      await settle();
+
+      expect(fixture.componentInstance.drops.map((drop) => drop.files[0].file.name)).toEqual([
+        'notes.txt',
+      ]);
+    });
+  });
+
+  describe('DROP_ZONE_DEFAULTS', () => {
+    /** A sibling on the zone's element that knows what the zone is for. */
+    @Directive({
+      selector: '[singleFile]',
+      providers: [
+        {
+          provide: DROP_ZONE_DEFAULTS,
+          useValue: { multiple: false, directory: false, filterAccepted: false },
+        },
+      ],
+    })
+    class SingleFile {}
+
+    @Component({
+      imports: [AngularFileDrop, SingleFile],
+      template: `
+        <div class="defaulted" dropZone singleFile></div>
+        <div class="bound" dropZone singleFile [multiple]="true"></div>
+        <div class="outer" dropZone singleFile><div class="nested" dropZone></div></div>
+      `,
+    })
+    class DefaultsHost {}
+
+    const zone = (fixture: ComponentFixture<DefaultsHost>, selector: string) =>
+      fixture.debugElement.query(By.css(selector)).injector.get(AngularFileDrop);
+
+    it('changes the defaults of the zone on the same element', () => {
+      const fixture = TestBed.createComponent(DefaultsHost);
+      fixture.detectChanges();
+
+      const defaulted = zone(fixture, '.defaulted');
+      expect(defaulted.multiple()).toBe(false);
+      expect(defaulted.directory()).toBe(false);
+      expect(defaulted.filterAccepted()).toBe(false);
+    });
+
+    it('loses to a bound input', () => {
+      const fixture = TestBed.createComponent(DefaultsHost);
+      fixture.detectChanges();
+
+      expect(zone(fixture, '.bound').multiple()).toBe(true);
+    });
+
+    it('does not leak into a zone nested inside', () => {
+      const fixture = TestBed.createComponent(DefaultsHost);
+      fixture.detectChanges();
+
+      expect(zone(fixture, '.nested').multiple()).toBe(true);
+      expect(zone(fixture, '.nested').filterAccepted()).toBe(true);
     });
   });
 });

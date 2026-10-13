@@ -27,6 +27,7 @@ Dropzone.js is great, but it often fights against modern Angular architecture by
 - Automatic hidden-file filtering (`.git`, `.DS_Store`, …)
 - Signal-based drag state for template styling and hints: `isDragOver`, and `dragTypes` for what is in flight
 - Optional `preventDocumentDrop`, so a missed drop no longer navigates the browser away from your app
+- A **signal-forms control** (`@h-k-dev/angular-file-drop/signal-forms`): the zone binds to `[formField]`, with `fileAccept` and `maxFileSize` validators
 - SSR-safe (guards all browser-only APIs)
 - A ready-made `FILE_TYPES` map of common `accept` strings
 
@@ -338,6 +339,65 @@ onDrop(event: FileDropEvent) {
 }
 ```
 
+### Signal forms
+
+`@h-k-dev/angular-file-drop/signal-forms` makes a zone a form control. Angular 22's signal forms bind
+`[formField]` to any directive on the element with a `value` model, so the zone itself is the control:
+focus, `touched`, `focusFirstInvalid` and the field's errors all land on it. It is its own entry point,
+and `@angular/forms` (22+) is an optional peer that only this entry needs.
+
+```ts
+import { form, required } from '@angular/forms/signals';
+import { FormField } from '@angular/forms/signals';
+import { AngularFileDrop } from '@h-k-dev/angular-file-drop';
+import {
+  DropZoneControl,
+  FILE_ACCEPT,
+  fileAccept,
+  maxFileSize,
+} from '@h-k-dev/angular-file-drop/signal-forms';
+
+@Component({
+  imports: [AngularFileDrop, DropZoneControl, FormField],
+  template: `
+    <div dropZone dropZoneControl acceptedFiles=".pdf" [formField]="f.contract">
+      {{ f.contract().value()?.name ?? 'Drop a PDF, or click to choose' }}
+    </div>
+    @for (error of f.contract().errors(); track error.kind) {
+      <p>{{ error.message }}</p>
+    }
+  `,
+})
+export class ContractUpload {
+  model = signal<{ contract: File | null }>({ contract: null });
+  f = form(this.model, (path) => {
+    required(path.contract, { message: 'Choose a contract' });
+    fileAccept(path.contract, '.pdf', { message: 'Only PDFs' });
+    maxFileSize(path.contract, 10 * 1024 * 1024, { message: 'At most 10 MB' });
+  });
+}
+```
+
+`dropZoneControl` holds **one** file: `File | null`, so `required()` reads an empty field as empty. On its
+element it changes the zone's defaults to one file, no folder traversal, and `filterAccepted` off:
+`acceptedFiles` still narrows the picker, but a wrong dropped file lands in the field, where `fileAccept`
+reports it, by name (`error.file`). A bound input on the zone still wins over a default.
+
+`dropZoneFilesControl` holds a **list**: `readonly DroppedFile[]`, folder paths included. A drop replaces
+the list, the way a native `<input type="file" multiple>` replaces its selection; add `append` to add to it
+instead. Signal forms' `required()` does **not** read an empty list as empty (only `''`, `false`, `null` and
+`undefined`), so ask for at least one file with `minLength(path, 1)`, and cap the count with `maxLength`.
+`fileAccept` and `maxFileSize` check every file in the list and name the first one that fails.
+
+| Export                                            | Description                                                                         |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `DropZoneControl` (`[dropZoneControl]`)           | One file, `File \| null`.                                                           |
+| `DropZoneFilesControl` (`[dropZoneFilesControl]`) | A list, `readonly DroppedFile[]`; `append` input.                                   |
+| `fileAccept(path, accept, { message? })`          | Every file matches `accept` (the `acceptedFiles` syntax). Error kind `FILE_ACCEPT`. |
+| `maxFileSize(path, bytes, { message? })`          | Every file is at most `bytes`. Error kind `MAX_FILE_SIZE`.                          |
+
+An empty field passes both validators: that is `required()`'s (or `minLength`'s) to say.
+
 ## API Reference
 
 ### Inputs
@@ -348,6 +408,7 @@ onDrop(event: FileDropEvent) {
 | `directory`           | `boolean` | `true`  | Recursively traverse dropped folders.                                                                            |
 | `directoryPicker`     | `boolean` | `false` | Make the click-to-open dialog a **folder** picker (`webkitdirectory`) rather than files.                         |
 | `acceptedFiles`       | `string`  | `''`    | `accept`-style filter, e.g. `.png,image/*,application/pdf`. Empty accepts everything.                            |
+| `filterAccepted`      | `boolean` | `true`  | Also remove dropped files that miss `acceptedFiles`. Off, it only narrows the picker; wrong files are emitted.   |
 | `ignoreHiddenFiles`   | `boolean` | `true`  | Drop dotfiles and files inside dot-folders (`.git`, `.DS_Store`, …).                                             |
 | `clickable`           | `boolean` | `true`  | Open the file picker when the host element is clicked or activated via keyboard.                                 |
 | `disabled`            | `boolean` | `false` | Ignore all drops, clicks, and keyboard activation.                                                               |
@@ -376,6 +437,12 @@ onDrop(event: FileDropEvent) {
 | `openDirectoryPicker(event?)`          | Open a folder picker.                                                                                                                                    |
 
 Access these in templates via the `dropZone` export: `#zone="dropZone"`.
+
+### Defaults
+
+`DROP_ZONE_DEFAULTS` (`{ multiple?, directory?, filterAccepted? }`) changes a zone's defaults when it is
+provided on the zone's own element, typically by a sibling directive that knows what the zone is for. The
+signal-forms controls provide it. A bound input still wins, and nested zones do not inherit it.
 
 ### Types
 

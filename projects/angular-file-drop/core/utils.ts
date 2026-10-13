@@ -82,6 +82,9 @@ export function isFileAccepted(file: File, acceptStr: string | null) {
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
+  // Only separators (`' , '`) is no filter at all, the same as an empty string —
+  // not a filter that turns every file away.
+  if (!accepted.length) return true;
 
   const mime = (file.type || '').toLowerCase();
   const baseMime = mime.replace(/\/.*$/, '');
@@ -135,6 +138,11 @@ export async function readDroppedFiles(
   traverseDirectories: boolean,
 ): Promise<DroppedFile[]> {
   const items = Array.from(dt.items ?? []).filter((item) => item.kind === 'file');
+  // Taken before the first `await`, while the drop event is still being
+  // dispatched: once its handler yields, the browser puts the DataTransfer
+  // into protected mode and `dt.files` reads empty — too late for every
+  // fallback below.
+  const fileList = toDroppedFiles(dt.files ?? []);
 
   // Feature detection for the modern File System Access API
   const supportsHandles = items.length > 0 && 'getAsFileSystemHandle' in items[0];
@@ -159,7 +167,7 @@ export async function readDroppedFiles(
         // to survive this filter and blow up on `handle.kind` downstream.
         .filter((h): h is FileSystemHandle => h != null);
 
-      return withFileListFallback(await walkHandles(handles, '', traverseDirectories), dt);
+      return withFileListFallback(await walkHandles(handles, '', traverseDirectories), fileList);
     }
 
     // Fallback 1: The old webkit API (still supports folders)
@@ -168,16 +176,16 @@ export async function readDroppedFiles(
         .map((item) => item.webkitGetAsEntry())
         .filter((entry): entry is FileSystemEntry => entry != null);
 
-      return withFileListFallback(await walkEntries(entries, '', traverseDirectories), dt);
+      return withFileListFallback(await walkEntries(entries, '', traverseDirectories), fileList);
     }
 
     // Fallback 2: Basic FileList (no folder traversal support)
-    return toDroppedFiles(dt.files);
+    return fileList;
   } catch (error) {
     console.error('[FileDnd] Error reading dropped files:', error);
     // Even a thrown read must not lose a drop the browser already handed us
-    // in full: `dt.files` is always there, it just cannot describe folders.
-    return toDroppedFiles(dt.files ?? []);
+    // in full: the FileList is always there, it just cannot describe folders.
+    return fileList;
   }
 }
 
@@ -189,9 +197,9 @@ export async function readDroppedFiles(
  * yield nothing and the plain `FileList` is not empty, the FileList is the
  * better answer: fewer paths, but real files rather than none.
  */
-function withFileListFallback(read: DroppedFile[], dt: DataTransfer): DroppedFile[] {
+function withFileListFallback(read: DroppedFile[], fileList: DroppedFile[]): DroppedFile[] {
   if (read.length) return read;
-  const fallback = toDroppedFiles(dt.files ?? []);
+  const fallback = fileList;
   if (fallback.length) {
     console.warn(
       '[FileDnd] Directory-aware read returned nothing; falling back to DataTransfer.files ' +

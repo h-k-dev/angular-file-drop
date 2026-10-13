@@ -166,6 +166,10 @@ describe('isFileAccepted', () => {
     expect(isFileAccepted(makeFile('a.png', 'image/png'), '')).toBe(true);
   });
 
+  it('accepts everything when the list is only separators', () => {
+    expect(isFileAccepted(makeFile('a.png', 'image/png'), ' , ')).toBe(true);
+  });
+
   it('accepts everything for the */* wildcard', () => {
     expect(isFileAccepted(makeFile('weird.bin', ''), '*/*')).toBe(true);
   });
@@ -404,6 +408,30 @@ describe('readDroppedFiles', () => {
     const result = await readDroppedFiles(dt, true);
 
     expect(result.map((f) => f.relativePath)).toEqual(['kept.txt']);
+  });
+
+  it('reads the FileList before the browser locks the DataTransfer', async () => {
+    // A real drop's DataTransfer goes into protected mode once the handler
+    // yields: `files` reads empty from then on. The fallback has to have
+    // taken it before the first await, or it falls back to nothing.
+    let locked = false;
+    const item = fileItem({
+      getAsFileSystemHandle: async () => {
+        locked = true;
+        return null;
+      },
+    });
+    const files = [makeFile('kept.p12')];
+    const dt = {
+      items: [item],
+      get files() {
+        return locked ? [] : files;
+      },
+    } as unknown as DataTransfer;
+
+    const result = await readDroppedFiles(dt, true);
+
+    expect(result.map((f) => f.relativePath)).toEqual(['kept.p12']);
   });
 
   it('still returns nothing when the folder API is empty and so is the FileList', async () => {

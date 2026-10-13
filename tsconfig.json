@@ -5,7 +5,10 @@
   "compilerOptions": {
     "paths": {
       "@h-k-dev/angular-file-drop": ["./projects/angular-file-drop/public-api.ts"],
-      "@h-k-dev/angular-file-drop/core": ["./projects/angular-file-drop/core/public-api.ts"]
+      "@h-k-dev/angular-file-drop/core": ["./projects/angular-file-drop/core/public-api.ts"],
+      "@h-k-dev/angular-file-drop/signal-forms": [
+        "./projects/angular-file-drop/signal-forms/public-api.ts"
+      ]
     },
     "strict": true,
     "noImplicitOverride": true,

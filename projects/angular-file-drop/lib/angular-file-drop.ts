@@ -4,6 +4,7 @@ import {
   computed,
   DestroyRef,
   ElementRef,
+  InjectionToken,
   PLATFORM_ID,
   inject,
 
@@ -35,6 +36,24 @@ import {
   toDroppedFiles,
 } from '@h-k-dev/angular-file-drop/core';
 import { isPlatformBrowser } from '@angular/common';
+
+/**
+ * Defaults for a dropzone's options, provided by something that knows what the
+ * zone is for — a sibling directive on the same element, typically. The
+ * signal-forms `DropZoneControl` provides one: a single-file field wants one
+ * file, no folders, and the wrong file kept for its validator rather than
+ * filtered away. A bound input still wins over a default.
+ *
+ * Read from the zone's own element only (`self`): a default meant for one
+ * zone must not leak into the zones nested inside it.
+ */
+export interface DropZoneDefaults {
+  multiple?: boolean;
+  directory?: boolean;
+  filterAccepted?: boolean;
+}
+
+export const DROP_ZONE_DEFAULTS = new InjectionToken<DropZoneDefaults>('DROP_ZONE_DEFAULTS');
 
 /** `dragTypes` is re-read on every `dragover` — every few pixels — and the
     list does not change mid-drag, so an equal list must not count as a
@@ -83,24 +102,37 @@ const sameTypes = (a: readonly string[], b: readonly string[]) =>
 })
 export class AngularFileDrop {
   destroyRef = inject(DestroyRef);
+  #defaults = inject(DROP_ZONE_DEFAULTS, { self: true, optional: true });
 
   /**
    * Whether multiple files can be selected.
    */
-  multiple = input(true, { transform: booleanAttribute });
+  multiple = input(this.#defaults?.multiple ?? true, { transform: booleanAttribute });
 
   /**
    * Allows dropped folders/directories to be traversed.
    *
    * This should NOT force the hidden file input into directory-picker mode.
    */
-  directory = input(true, { transform: booleanAttribute });
+  directory = input(this.#defaults?.directory ?? true, { transform: booleanAttribute });
   directoryPicker = input(false, { transform: booleanAttribute });
 
   /**
    * The accepted file types.
    */
   acceptedFiles = input('');
+
+  /**
+   * Whether `acceptedFiles` also removes the files that do not match it.
+   *
+   * On (the default), a wrong file never reaches `fileDrop` — and nothing
+   * says so: from the user's side the drop simply did nothing. Off,
+   * `acceptedFiles` only narrows the picker, and a wrong dropped file is
+   * emitted like any other, for a consumer that says why it is wrong — a form
+   * validator such as `fileAccept`, an inline message. The picker cannot
+   * produce one in the first place, short of the user overriding its filter.
+   */
+  filterAccepted = input(this.#defaults?.filterAccepted ?? true, { transform: booleanAttribute });
   ignoreHiddenFiles = input(true, { transform: booleanAttribute });
   clickable = input(true, { transform: booleanAttribute });
   disabled = input(false, { transform: booleanAttribute });
@@ -463,7 +495,9 @@ export class AngularFileDrop {
   // ─── Validation ───────────────────────────────────────────────────────────
   prepareFiles(files: DroppedFile[]) {
     const visible = this.ignoreHiddenFiles() ? filterHiddenFiles(files) : files;
-    const accepted = filterAcceptedFiles(visible, this.acceptedFiles());
+    const accepted = this.filterAccepted()
+      ? filterAcceptedFiles(visible, this.acceptedFiles())
+      : visible;
     return enforceMultiple(accepted, this.multiple());
   }
 }
